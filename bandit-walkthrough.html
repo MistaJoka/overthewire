@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bandit // Walkthrough</title>
+<style>
+  :root{
+    --bg:#100e0c;--surface:#1a1714;--surface2:#221d18;--line:#332c25;
+    --text:#d8cfbe;--muted:#8a7f6e;--amber:#f0a830;--amber-dim:#b87d28;
+    --teal:#6bb3a0;--done:#7fc77f;--red:#d98b6a;--code:#ead9b8;
+    --mono:'JetBrains Mono','Fira Code',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --side:308px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);line-height:1.55;
+    -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+  ::selection{background:rgba(240,168,48,.25)}
+
+  /* mobile bar */
+  .mbar{display:none;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .mbar button{background:var(--surface2);border:1px solid var(--line);color:var(--amber);font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:7px;cursor:pointer}
+  .mbar span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .app{flex:1;display:flex;min-height:0}
+
+  /* ---------- sidebar ---------- */
+  .side{width:var(--side);flex-shrink:0;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+  .side-head{padding:18px 18px 14px;border-bottom:1px solid var(--line)}
+  .brand{font-size:15px;font-weight:800;letter-spacing:-.01em}
+  .brand span{color:var(--amber)}
+  .pbar{margin-top:12px;height:6px;background:var(--surface2);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .pbar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amber-dim),var(--amber));transition:width .4s}
+  .pmeta{margin-top:8px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .pmeta b{color:var(--amber);font-size:12px}
+  .pmeta button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer}
+  .pmeta button:hover{border-color:var(--red);color:var(--red)}
+  .side-tabs{display:flex;gap:6px;padding:12px 14px 0}
+  .stab{flex:1;background:var(--surface2);border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:11.5px;padding:7px 0;border-radius:7px;cursor:pointer;text-transform:lowercase}
+  .stab:hover{color:var(--text)}
+  .stab.on{background:var(--amber);color:#1a1208;border-color:var(--amber);font-weight:700}
+  .side-search{margin:12px 14px 8px;background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 11px;border-radius:7px}
+  .side-search:focus{outline:none;border-color:var(--amber)}.side-search::placeholder{color:var(--muted)}
+  .navlist{flex:1;overflow-y:auto;padding:2px 10px 16px}
+  .nores{color:var(--muted);font-size:12px;padding:16px 8px;text-align:center}
+  .lrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;border-left:2px solid transparent;
+    color:var(--muted);font-family:var(--mono);font-size:12.5px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:.12s}
+  .lrow:hover{background:var(--surface2);color:var(--text)}
+  .lrow.active{background:var(--surface2);color:var(--text);border-left-color:var(--amber)}
+  .ldot{width:8px;height:8px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--line);flex-shrink:0}
+  .lrow.done .ldot{background:var(--done);border-color:var(--done)}
+  .lrow.next .ldot{border-color:var(--amber);box-shadow:0 0 0 3px rgba(240,168,48,.15)}
+  .ldot.tool{border-color:var(--teal)}
+  .lnum{color:var(--amber-dim);font-size:11px;font-weight:700;flex-shrink:0;width:20px}
+  .lrow.done .lnum{color:var(--done)}
+  .lrow.active .lnum{color:var(--amber)}
+  .ltxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---------- detail ---------- */
+  .detail{flex:1;overflow-y:auto;min-height:0}
+  .dwrap{max-width:760px;margin:0 auto;padding:30px 34px 90px}
+  .dnav{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+  .dbtn{background:var(--surface);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:11.5px;padding:6px 12px;border-radius:7px;cursor:pointer}
+  .dbtn:hover:not(:disabled){border-color:var(--amber);color:var(--amber)}
+  .dbtn:disabled{opacity:.35;cursor:default}
+  .dcrumb{margin:0 auto;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+  .dhead{display:flex;align-items:flex-start;gap:16px;margin-bottom:14px}
+  .dh1{font-size:clamp(22px,4vw,32px);font-weight:800;letter-spacing:-.02em;line-height:1.1;display:flex;align-items:baseline;gap:12px}
+  .dhnum{font-size:.8em;color:var(--amber)}
+  .dhead.done .dhnum{color:var(--done)}
+  .chk{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap;padding-top:8px}
+  .chk input{accent-color:var(--done);width:16px;height:16px;cursor:pointer}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+  .tag{font-size:10.5px;color:var(--teal);border:1px solid rgba(107,179,160,.3);padding:2px 9px;border-radius:99px}
+  .goal{font-size:14px;line-height:1.6;margin-bottom:20px}
+  .goal .lab{color:var(--amber);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:5px}
+  .goal code,.hint code{background:var(--surface2);color:var(--teal);padding:1px 5px;border-radius:4px;font-size:.9em}
+
+  .reveals{display:flex;flex-direction:column;gap:9px}
+  .rbtn{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);color:var(--amber);font-family:var(--mono);font-size:12px;padding:7px 14px;border-radius:7px;cursor:pointer;transition:.15s}
+  .rbtn:hover{border-color:var(--amber)}
+  .panel{display:none}.panel.show{display:block}
+  .hint{font-size:13px;color:var(--muted);border-left:2px solid var(--amber-dim);padding:8px 0 8px 14px;font-style:italic}
+
+  .phase{margin-top:14px}.phase:first-child{margin-top:2px}
+  .plabel{display:flex;align-items:center;gap:9px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .plabel .dot{width:19px;height:19px;border-radius:50%;border:1px solid var(--amber-dim);color:var(--amber);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-style:normal}
+  .phase.connect .plabel .dot,.phase.advance .plabel .dot{border-color:var(--teal);color:var(--teal)}
+  .phase.capture .plabel{color:var(--amber)}
+  ol.steps{list-style:none;counter-reset:s;margin:0 0 0 9px;padding:0}
+  ol.steps > li{counter-increment:s;position:relative;padding:0 0 12px 26px;margin:0}
+  ol.steps > li::before{content:counter(s);position:absolute;left:0;top:1px;width:18px;height:18px;border:1px solid var(--line);color:var(--muted);border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700}
+  ol.steps > li:not(:last-child)::after{content:'';position:absolute;left:9px;top:20px;bottom:0;width:1px;background:var(--line)}
+  .single{margin-left:9px}
+  .snote{font-size:13px;line-height:1.55}
+  .snote code,.cap code{background:var(--surface2);color:var(--teal);padding:1px 5px;border-radius:4px;font-size:11.5px}
+  .cmdbox{position:relative;background:#0c0a08;border:1px solid var(--line);border-radius:7px;padding:11px 48px 11px 14px;font-size:12.5px;color:var(--code);overflow-x:auto;white-space:pre-wrap;word-break:break-word;margin-top:8px}
+  .copy{position:absolute;top:8px;right:8px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer}
+  .copy:hover{color:var(--amber);border-color:var(--amber-dim)}
+  .cap{font-size:13px;line-height:1.55;background:rgba(240,168,48,.06);border:1px solid rgba(240,168,48,.25);border-radius:7px;padding:10px 13px}
+  .cap b{color:var(--amber)}
+  .concept{margin-top:16px;background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:7px;padding:12px 14px;font-size:13px;line-height:1.55}
+  .concept .lab{color:var(--teal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:5px}
+  .concept code{background:var(--bg);color:var(--teal);padding:1px 5px;border-radius:4px;font-size:11.5px}
+  .gotcha{margin-top:9px;font-size:12.5px;color:var(--red);border-left:3px solid var(--red);padding:8px 0 8px 14px;background:rgba(217,139,106,.05)}
+  .gotcha .lab{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.1em;margin-right:6px}
+  .gotcha code{background:var(--surface2);padding:1px 5px;border-radius:4px}
+
+  .notes-wrap{margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+  .nlab{color:var(--teal);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+  .notebox{width:100%;min-height:90px;background:#0c0a08;border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.5;padding:12px 14px;resize:vertical}
+  .notebox:focus{outline:none;border-color:var(--teal)}.notebox::placeholder{color:var(--muted)}
+
+  /* tool detail */
+  .tdesc{font-size:14px;line-height:1.6;margin:6px 0 20px}
+  .flagtable{display:flex;flex-direction:column;gap:7px;margin-bottom:22px}
+  .frow{display:flex;gap:12px;font-size:13px;align-items:baseline}
+  .frow code{background:#0c0a08;color:var(--amber);padding:3px 9px;border-radius:6px;min-width:120px;text-align:center;flex-shrink:0;font-size:11.5px}
+  .frow span{color:var(--muted);line-height:1.5}
+  .usedlab{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin-bottom:10px}
+  .usedchips{display:flex;gap:7px;flex-wrap:wrap}
+  .uchip{background:var(--surface2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:3px 10px;border-radius:99px;cursor:pointer}
+  .uchip:hover{border-color:var(--amber);color:var(--amber)}
+  .kbdhint{margin-top:30px;font-size:11px;color:var(--muted)}
+  .kbdhint kbd{background:var(--surface2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:10.5px}
+
+  @media(max-width:760px){
+    .mbar{display:flex}
+    .side{position:fixed;top:0;bottom:0;left:0;z-index:40;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.5)}
+    .side.open{transform:none}
+    .dwrap{padding:22px 18px 80px}
+    .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30;display:none}
+    .scrim.show{display:block}
+  }
+</style>
+</head>
+<body>
+  <div class="mbar">
+    <button id="menuBtn">☰ menu</button>
+    <span id="mtitle"></span>
+  </div>
+  <div class="app">
+    <aside class="side" id="side">
+      <div class="side-head">
+        <div class="brand">bandit <span>//</span> walkthrough</div>
+        <div class="pbar"><i id="barFill"></i></div>
+        <div class="pmeta"><b id="doneN">0</b>/33 cleared<button id="resetBtn">reset</button></div>
+      </div>
+      <div class="side-tabs">
+        <button class="stab on" data-v="levels">levels</button>
+        <button class="stab" data-v="commands">commands</button>
+      </div>
+      <input class="side-search" id="search" placeholder="filter…">
+      <nav class="navlist" id="navlist"></nav>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+    <main class="detail" id="detail"></main>
+  </div>
+<script>
+const HOST="bandit.labs.overthewire.org", PORT="2220";
+const sshPw = n => `ssh -p ${PORT} bandit${n}@${HOST}`;
+const ENTRY = {
+  0 :{cmd:sshPw(0), note:"password is <code>bandit0</code> — the one credential you start with."},
+  14:{cmd:`ssh -i sshkey.private -p ${PORT} bandit14@localhost`, localhost:true,
+      note:"no password — log in with the private key from bandit13's home, connecting to <code>localhost</code> from your current shell."},
+  17:{cmd:`ssh -i /tmp/key17 -p ${PORT} bandit17@localhost`, localhost:true,
+      note:"log in with the RSA key you saved in level 16, connecting to <code>localhost</code>."},
+  18:{cmd:sshPw(18),
+      note:"this login succeeds but bandit18's <code>.bashrc</code> logs you out instantly — that IS the challenge; you run the command non-interactively instead (see Solve)."},
+  26:{cmd:`ssh -i bandit26.sshkey -p ${PORT} bandit26@localhost`, localhost:true,
+      note:"key login drops you into a restricted pager (<code>more</code>), not a shell — shrink your terminal window first, then escape via vim (see Solve)."},
+};
+const entryFor = n => ENTRY[n] || {cmd:sshPw(n), note:"use the password you captured in the previous level."};
+
+/* ========================================================================
+   LAYER 2 — DATA  (unique solve + where the next password lives)
+   ======================================================================== */
+const LEVELS = [
+ {from:0,to:1,t:"readme",tags:["cat","files"],
+  goal:"The next password is stored in a file called readme in the home directory.",
+  hint:"List the directory, then print the file.",
+  solve:[{n:"List home, then read the file.",c:"ls\ncat readme"}],
+  source:"the file <code>readme</code>",
+  concept:"<code>ls</code> lists directory entries; <code>cat</code> dumps a file to the terminal."},
+
+ {from:1,to:2,t:"Dash filename",tags:["cat","quoting"],
+  goal:"The password is in a file named '-' (a single dash), which the shell reads as a flag.",
+  hint:"Force the dash to be read as a path, not an option.",
+  solve:[{n:"Prefix <code>./</code> so cat treats it as a file path.",c:"cat ./-"}],
+  source:"the file named <code>-</code>",
+  concept:"Tools read <code>-</code> as 'standard input'. <code>./</code> disambiguates it as a relative path.",
+  gotcha:"<code>cat -</code> alone hangs waiting for keyboard input — Ctrl-C and use <code>./-</code>."},
+
+ {from:2,to:3,t:"Spaces in filename",tags:["cat","quoting"],
+  goal:"The password file's name contains spaces.",
+  hint:"Quote it, or escape each space (tab-completion does this).",
+  solve:[{n:"Quote the whole name so spaces don't split it into separate arguments.",c:"cat \"spaces in this filename\""}],
+  source:"the spaces-in-name file",
+  concept:"The shell splits arguments on spaces; quoting keeps a multi-word name as one filename."},
+
+ {from:3,to:4,t:"Hidden file",tags:["ls","hidden"],
+  goal:"The password is in a hidden file inside the inhere directory.",
+  hint:"Hidden files start with a dot — use <code>ls -a</code>.",
+  solve:[{n:"Reveal dotfiles, spot the hidden one, then read it.",c:"ls -a inhere/\ncat inhere/...Hiding-From-You"}],
+  source:"the hidden file in <code>inhere/</code>",
+  concept:"Files beginning with <code>.</code> are hidden by convention; <code>-a</code> shows them."},
+
+ {from:4,to:5,t:"Human-readable file",tags:["file","types"],
+  goal:"Of ten files in inhere, only one holds human-readable ASCII text.",
+  hint:"Use <code>file</code> on all of them, then cat the ASCII one.",
+  solve:[{n:"Identify every file's type; look for 'ASCII text'.",c:"file ./inhere/-file*"},
+         {n:"Read the ASCII one (e.g. -file07).",c:"cat ./inhere/-file07"}],
+  source:"the only ASCII-text file in <code>inhere/</code>",
+  concept:"<code>file</code> inspects content (magic bytes), not the extension, to guess a type."},
+
+ {from:5,to:6,t:"Find by properties",tags:["find","size","perms"],
+  goal:"A file under inhere is human-readable, exactly 1033 bytes, and NOT executable.",
+  hint:"<code>find</code> can match all three at once.",
+  solve:[{n:"Chain the tests: regular file, exact size, not executable, readable.",c:"find inhere -type f -size 1033c ! -executable -readable"},
+         {n:"Read the match.",c:"cat <path>"}],
+  source:"the 1033-byte readable file under <code>inhere/</code>",
+  concept:"<code>-size 1033c</code> = exactly 1033 bytes (c=bytes); <code>!</code> negates the next test."},
+
+ {from:6,to:7,t:"Server-wide find",tags:["find","owner","redirect"],
+  goal:"Somewhere on the whole server: owned by user bandit7, group bandit6, exactly 33 bytes.",
+  hint:"Search from <code>/</code> and discard permission-denied noise.",
+  solve:[{n:"Search the entire filesystem by owner, group, and size; hide errors.",c:"find / -user bandit7 -group bandit6 -size 33c 2>/dev/null"},
+         {n:"Read the single result.",c:"cat <path>"}],
+  source:"the 33-byte file owned by bandit7",
+  concept:"<code>2>/dev/null</code> sends stderr (fd 2) to the null device, hiding the 'Permission denied' spam."},
+
+ {from:7,to:8,t:"grep keyword",tags:["grep"],
+  goal:"The password is in data.txt, on the line containing the word 'millionth'.",
+  hint:"Search the file for that keyword.",
+  solve:[{n:"Print the matching line.",c:"grep millionth data.txt"}],
+  source:"the line beside 'millionth' in <code>data.txt</code>",
+  concept:"<code>grep</code> prints lines matching a pattern."},
+
+ {from:8,to:9,t:"Unique line",tags:["sort","uniq"],
+  goal:"The only line in data.txt that occurs exactly once.",
+  hint:"<code>uniq -u</code> needs adjacent duplicates, so sort first.",
+  solve:[{n:"Sort to group identical lines, then keep the non-repeated one.",c:"sort data.txt | uniq -u"}],
+  source:"the unique line of <code>data.txt</code>",
+  concept:"<code>uniq</code> compares each line to the previous, so duplicates must be adjacent — hence the sort. <code>-u</code> prints only uniques."},
+
+ {from:9,to:10,t:"strings in binary",tags:["strings","grep"],
+  goal:"data.txt is mostly binary; the password is a readable string preceded by several '=' characters.",
+  hint:"Extract printable strings, then grep the '=' markers.",
+  solve:[{n:"Pull readable text from the binary and filter to the marked line.",c:"strings data.txt | grep '===='"}],
+  source:"the '='-prefixed string in <code>data.txt</code>",
+  concept:"<code>strings</code> scans for runs of printable characters (default ≥4), surfacing text inside binaries."},
+
+ {from:10,to:11,t:"base64 decode",tags:["base64","encoding"],
+  goal:"data.txt is base64-encoded.",
+  hint:"Decode it.",
+  solve:[{n:"Decode the file.",c:"base64 -d data.txt"}],
+  source:"the decoded contents of <code>data.txt</code>",
+  concept:"Base64 represents binary as 64 ASCII chars — encoding, not encryption; reversible with <code>-d</code>."},
+
+ {from:11,to:12,t:"ROT13",tags:["tr","cipher"],
+  goal:"Every letter in data.txt is rotated 13 places (ROT13).",
+  hint:"<code>tr</code> can map A–Z onto its 13-shifted version.",
+  solve:[{n:"Translate each letter back.",c:"cat data.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'"}],
+  source:"the de-ROT13'd contents of <code>data.txt</code>",
+  concept:"ROT13 shifts letters by 13; applying it twice reverses it. <code>tr</code> does the substitution."},
+
+ {from:12,to:13,t:"Decompression chain",tags:["xxd","gzip","bzip2","tar"],
+  goal:"data.txt is a hexdump of a file compressed many times over (gzip / bzip2 / tar, repeatedly).",
+  hint:"Reverse the hexdump, then loop: identify → rename → decompress, until plain text.",
+  solve:[{n:"Home is read-only here — work in a writable temp dir.",c:"mkdir /tmp/work && cp data.txt /tmp/work && cd /tmp/work"},
+         {n:"<code>-r</code> reverses a hexdump back into raw binary.",c:"xxd -r data.txt > data"},
+         {n:"Identify the compression type.",c:"file data"},
+         {n:"Rename to the matching extension and decompress (example: gzip).",c:"mv data data.gz && gunzip data.gz"},
+         {n:"Repeat steps 3–4 (gunzip / bunzip2 / tar xf) ~9× until <code>file</code> says ASCII text, then read it.",c:"file data && cat data"}],
+  source:"the fully decompressed file",
+  concept:"<code>xxd -r</code> rebuilds binary from hex; each compressor has unique magic bytes, so <code>file</code> tells you which tool comes next.",
+  gotcha:"You can't write in your home dir — always work in a unique <code>/tmp</code> folder."},
+
+ {from:13,to:14,t:"SSH private key",tags:["ssh","keys"],yields:"key",
+  goal:"No password this time — bandit13's home holds an SSH private key for bandit14.",
+  hint:"Find the key; you'll authenticate with it in the Advance step.",
+  solve:[{n:"Locate the private key in your home directory.",c:"ls"}],
+  source:"an SSH private key <code>sshkey.private</code> (no password string)",
+  concept:"Key auth proves identity with a private key instead of a password. You log into bandit14 on <code>localhost</code> using <code>-i</code>.",
+  gotcha:"If SSH says the key is 'too open', copy it somewhere and <code>chmod 600</code> it first."},
+
+ {from:14,to:15,t:"netcat submit",tags:["nc","networking"],
+  goal:"Submit the current (bandit14) password to localhost port 30000 to receive the next.",
+  hint:"Read your own password file and pipe it into netcat.",
+  solve:[{n:"You can read your own password file; send it over a raw TCP connection.",c:"cat /etc/bandit_pass/bandit14 | nc localhost 30000"}],
+  source:"the reply from the service on port 30000",
+  concept:"<code>nc</code> makes raw TCP connections; piped text is sent to the listening service, which replies with the next password."},
+
+ {from:15,to:16,t:"SSL submit",tags:["openssl","ssl"],
+  goal:"Same idea, but port 30001 only accepts an encrypted SSL/TLS connection.",
+  hint:"Plain nc gets garbage — wrap it in TLS with <code>openssl s_client</code>.",
+  solve:[{n:"Open a TLS session, then paste the current password and press Enter.",c:"openssl s_client -connect localhost:30001 -quiet"}],
+  source:"the reply from the SSL service on port 30001",
+  concept:"<code>s_client</code> is OpenSSL's TLS test client; the service speaks TLS so a raw tool fails.",
+  gotcha:"Use <code>-quiet</code> / <code>-ign_eof</code> so the session doesn't close on the first newline."},
+
+ {from:16,to:17,t:"Port scan + SSL key",tags:["nmap","openssl","keys"],yields:"key",
+  goal:"One port in 31000–32000 speaks SSL and returns an RSA private key when you submit the password.",
+  hint:"Scan the range, s_client into the SSL port, save the returned key.",
+  solve:[{n:"Scan the range; <code>-sV</code> reveals which port speaks SSL.",c:"nmap -p 31000-32000 -sV localhost"},
+         {n:"Connect to the SSL port and submit the current password.",c:"openssl s_client -connect localhost:<sslport> -quiet"},
+         {n:"Save the returned RSA key and lock its permissions.",c:"nano /tmp/key17   # paste key, then:  chmod 600 /tmp/key17"}],
+  source:"an RSA private key returned over SSL (saved to <code>/tmp/key17</code>)",
+  concept:"A port scan maps listening services; <code>-sV</code> fingerprints the protocol so you can pick the SSL port out of the noise.",
+  gotcha:"<code>-sV</code> is slow (a minute+), and several ports answer SSL — only one returns a key. Try the SSL ports until you see <code>-----BEGIN RSA PRIVATE KEY-----</code>; the rest just echo your input back."},
+
+ {from:17,to:18,t:"diff files",tags:["diff"],
+  goal:"passwords.new differs from passwords.old by exactly one line — that line is the password.",
+  hint:"Compare the two files.",
+  solve:[{n:"Show the differing line.",c:"diff passwords.old passwords.new"}],
+  source:"the single differing line between <code>passwords.old</code> and <code>passwords.new</code>",
+  concept:"<code>diff</code> reports line-by-line differences; the one changed line is your answer."},
+
+ {from:18,to:19,t:"Run on login",tags:["ssh","bashrc"],
+  goal:"bandit18's .bashrc logs you out the instant you connect. Read readme anyway.",
+  hint:"Pass the command to ssh so it runs before the shell can quit.",
+  solve:[{n:"Append the command to ssh — no interactive shell starts, so .bashrc's logout never fires.",c:"ssh -p 2220 bandit18@bandit.labs.overthewire.org cat readme"}],
+  source:"the file <code>readme</code>, read non-interactively",
+  concept:"<code>ssh user@host &lt;cmd&gt;</code> runs one command remotely and returns, bypassing the interactive login that triggers the logout."},
+
+ {from:19,to:20,t:"setuid binary",tags:["setuid","privesc"],
+  goal:"A setuid binary (bandit20-do) runs commands as bandit20.",
+  hint:"Run it with the command you want executed as the next user.",
+  solve:[{n:"Confirm it elevates, then read the next password through it.",c:"./bandit20-do id\n./bandit20-do cat /etc/bandit_pass/bandit20"}],
+  source:"<code>/etc/bandit_pass/bandit20</code>, via the setuid binary",
+  concept:"A setuid binary runs with the file owner's privileges. Owned by bandit20, so its commands can read bandit20's files."},
+
+ {from:20,to:21,t:"Listener + setuid",tags:["nc","setuid"],
+  goal:"A setuid binary (suconnect) connects to a port you choose; given the correct current password, it returns the next. Two terminals.",
+  hint:"Serve your current password on a port with netcat, then point the binary at it.",
+  solve:[{n:"Terminal A — listen on a port, serving your current password to whoever connects.",c:"nc -lvp 4444 < /etc/bandit_pass/bandit20"},
+         {n:"Terminal B — point the setuid binary at your listener.",c:"./suconnect 4444"}],
+  source:"the reply suconnect prints back in Terminal A",
+  concept:"You host the password on a port; the setuid binary (running as bandit21) connects in and rewards you once you prove you know bandit20's password.",
+  gotcha:"Start the listener FIRST, and the answer appears in the listener terminal. No second SSH session? Background it: <code>nc -lvp 4444 < pw &amp;</code> then run suconnect, and check with <code>jobs</code> — or use <code>tmux</code> / <code>screen</code> for split panes."},
+
+ {from:21,to:22,t:"cron → tmp file",tags:["cron","scripts"],
+  goal:"A scheduled (cron) job periodically writes the next password to a file in /tmp.",
+  hint:"Read the cron config → read its script → cat the output file.",
+  solve:[{n:"Read the cron job definition.",c:"cat /etc/cron.d/cronjob_bandit22"},
+         {n:"Read the script it runs to find the /tmp output path.",c:"cat /usr/bin/cronjob_bandit22.sh"},
+         {n:"Read the file the script writes.",c:"cat /tmp/<file-from-script>"}],
+  source:"the <code>/tmp</code> file the cron job writes",
+  concept:"cron runs scheduled jobs; <code>/etc/cron.d/</code> holds definitions pointing at scripts. Reading the script reveals exactly what it does."},
+
+ {from:22,to:23,t:"cron + md5 path",tags:["cron","md5"],
+  goal:"The cron script derives its output filename by md5-hashing a string like 'I am user bandit23'.",
+  hint:"Reproduce the exact hash, then read /tmp/<hash>.",
+  solve:[{n:"Read the script; note how it builds the filename from an md5sum.",c:"cat /usr/bin/cronjob_bandit23.sh"},
+         {n:"Reproduce the hash for the next user.",c:"echo I am user bandit23 | md5sum"},
+         {n:"Read the predicted file.",c:"cat /tmp/<hash>"}],
+  source:"<code>/tmp/&lt;md5&gt;</code>, named by the script's hash",
+  concept:"The script is deterministic: same input string → same md5 → same filename, so you can predict the path.",
+  gotcha:"Match the script's exact echo string, and strip the trailing <code>  -</code> that md5sum appends (use <code>cut -d' ' -f1</code> if needed)."},
+
+ {from:23,to:24,t:"cron + your script",tags:["cron","bash","privesc"],
+  goal:"A cron job runs (as bandit24) every script dropped into /var/spool/bandit24/foo, then deletes it.",
+  hint:"Drop a script that copies bandit24's password somewhere world-readable; wait ~60s.",
+  solve:[{n:"Make a writable, readable output dir.",c:"mkdir /tmp/out && chmod 777 /tmp/out"},
+         {n:"Write a script that dumps the password there.",c:"printf '#!/bin/bash\\ncat /etc/bandit_pass/bandit24 > /tmp/out/pw\\n' > /tmp/run.sh"},
+         {n:"Make the script reachable + executable by the cron user, then drop it in.",c:"chmod 777 /tmp/run.sh\ncp /tmp/run.sh /var/spool/bandit24/foo/"},
+         {n:"Wait up to a minute, then read the result.",c:"cat /tmp/out/pw"}],
+  source:"<code>/tmp/out/pw</code>, written by your dropped script",
+  concept:"The cron job runs your code with bandit24's privileges, so your script reads bandit24's password and drops it where you can reach it.",
+  gotcha:"BOTH the output dir and the script must be reachable by bandit24 — <code>chmod 777</code> the dir and make the script world-readable/executable, or the cron run silently does nothing."},
+
+ {from:24,to:25,t:"Brute-force pin",tags:["nc","bruteforce","bash"],
+  goal:"localhost:30002 wants your current password plus an unknown 4-digit pincode (0000–9999).",
+  hint:"Generate all 10000 'password NNNN' lines and send them in one connection.",
+  solve:[{n:"Build every guess; brace expansion keeps leading zeros.",c:"for i in {0000..9999}; do echo \"$(cat /etc/bandit_pass/bandit24) $i\"; done > /tmp/all"},
+         {n:"Send them all at once and filter out the rejections so the real reply stands out.",c:"cat /tmp/all | nc localhost 30002 | grep -v 'Wrong'"}],
+  source:"the server reply for the correct pin on port 30002",
+  concept:"10⁴ combos is tiny, so exhaustive search is instant. <code>{0000..9999}</code> yields zero-padded numbers paired with the known password.",
+  gotcha:"The correct reply is one line buried in 10,000 — pipe through <code>grep -v Wrong</code> rather than scrolling. And send the whole file in ONE connection; reconnecting per guess is far slower."},
+
+ {from:25,to:26,t:"SSH key (→ pager)",tags:["ssh","keys"],yields:"key",
+  goal:"bandit25's home holds bandit26's SSH key — but logging in as bandit26 drops you into a pager, not a shell.",
+  hint:"Just locate the key here; the pager escape happens in the next level.",
+  solve:[{n:"Find bandit26's SSH key in your home directory.",c:"ls"}],
+  source:"the SSH key <code>bandit26.sshkey</code> (key login, no password)",
+  concept:"bandit26's login shell is a text pager, so the key gets you in but not to a prompt — you'll break out next level."},
+
+ {from:26,to:27,t:"Pager shell-escape",tags:["more","vim","setuid"],
+  goal:"You arrive as bandit26 trapped in a pager (more). Escape to a real shell, then grab bandit27.",
+  hint:"Make the pager actually page (shrink window), open vim with <code>v</code>, break out, then use the setuid helper.",
+  solve:[{n:"With your terminal window already short, the pager pauses instead of exiting. Press <code>v</code> to launch vim."},
+         {n:"In vim, set a real shell.",c:":set shell=/bin/bash"},
+         {n:"Drop into bash.",c:":shell"},
+         {n:"Now in a normal shell, read the next password via the setuid helper.",c:"./bandit27-do cat /etc/bandit_pass/bandit27"}],
+  source:"<code>/etc/bandit_pass/bandit27</code>, via the setuid binary",
+  concept:"Pagers like <code>more</code> can launch <code>$EDITOR</code> with <code>v</code>; vim can then spawn a shell (<code>:shell</code>), escaping the restricted login shell.",
+  gotcha:"If the window is tall enough to show everything at once, more exits and you never get the <code>v</code> prompt — keep it short."},
+
+ {from:27,to:28,t:"git clone",tags:["git","ssh"],
+  goal:"The password lives in a git repository served over SSH.",
+  hint:"Clone it into a writable /tmp dir using the ssh:// URL on port 2220.",
+  solve:[{n:"Work in a writable temp dir, then clone (auth with bandit27's password).",c:"mkdir /tmp/g && cd /tmp/g\ngit clone ssh://bandit27-git@localhost:2220/home/bandit27-git/repo"},
+         {n:"Read the README.",c:"cat repo/README*"}],
+  source:"the README in the cloned git repo",
+  concept:"Git can use SSH as a transport (<code>ssh://user@host:port/path</code>); cloning copies the whole repo, history included."},
+
+ {from:28,to:29,t:"git history",tags:["git","history"],
+  goal:"The README's password was redacted in the latest commit, but an earlier commit still has it.",
+  hint:"Walk the commit history with diffs.",
+  solve:[{n:"Enter the repo and view each commit's patch.",c:"cd repo && git log -p"},
+         {n:"Read the earlier README version shown in the diff output."}],
+  source:"the redacted line, recovered from git history",
+  concept:"Git keeps every version; a value 'removed' from the current file survives in history unless the history is rewritten."},
+
+ {from:29,to:30,t:"git branches",tags:["git","branches"],
+  goal:"Nothing useful in the main branch — the password is on another branch.",
+  hint:"List all branches (including remote), check out the non-master one.",
+  solve:[{n:"List local + remote-tracking branches.",c:"git branch -a"},
+         {n:"Inspect the other branch (e.g. dev).",c:"git checkout dev && cat README"}],
+  source:"the README on the <code>dev</code> branch",
+  concept:"Branches are parallel histories; <code>-a</code> includes remote-tracking branches not checked out by default."},
+
+ {from:30,to:31,t:"git tags",tags:["git","tags"],
+  goal:"The repo looks empty — the secret is stored in a git tag.",
+  hint:"List tags, then show the interesting one.",
+  solve:[{n:"List tags (e.g. <code>secret</code>), then print what it points at.",c:"git tag\ngit show secret"}],
+  source:"the content of the <code>secret</code> git tag",
+  concept:"Tags are named pointers to commits/objects; <code>git show</code> resolves and prints the tagged content."},
+
+ {from:31,to:32,t:"git push",tags:["git","push","gitignore"],
+  goal:"Create the file the repo wants and push it — but .gitignore blocks *.txt.",
+  hint:"Make key.txt, force-add past .gitignore, commit, push.",
+  solve:[{n:"Read the README for the exact file + content it expects.",c:"cat README.md"},
+         {n:"Create the file.",c:"echo '<required-content>' > key.txt"},
+         {n:"Force-add past the ignore rule, commit, and push.",c:"git add -f key.txt && git commit -m add && git push"}],
+  source:"the server's response to your <code>git push</code>",
+  concept:".gitignore (here <code>*.txt</code>) blocks staging; <code>-f</code> overrides it. The push triggers a server hook that returns the password.",
+  gotcha:"Without <code>-f</code>, <code>git add</code> silently skips the ignored file and your push contains nothing."},
+
+ {from:32,to:33,t:"Uppercase shell",tags:["shell","tricks"],
+  goal:"You're dropped into a shell that UPPERCASES everything you type, so commands fail (sh → SH: not found).",
+  hint:"<code>$0</code> isn't uppercased — it re-launches the shell normally.",
+  solve:[{n:"At the prompt, type just this — it spawns a fresh, normal shell.",c:"$0"},
+         {n:"Read the final password.",c:"cat /etc/bandit_pass/bandit33"}],
+  source:"<code>/etc/bandit_pass/bandit33</code>, after spawning a clean shell",
+  concept:"<code>$0</code> holds the shell's invocation name. The uppercasing hits your literal keystrokes, but <code>$0</code>'s value is substituted from memory — bypassing the filter."},
+];
+
+const CLOSER = {
+  title:"Level 33 — end of the game",
+  body:"bandit33's <code>README.txt</code> congratulates you: there's currently no level 34. You've now covered SSH, file/permission tricks, encoding &amp; crypto, raw networking, SSL, setuid, cron privesc, and git forensics — a real Linux + recon foundation. Natural next wargames: <b>Natas</b> (web/server-side exploitation) and <b>Leviathan</b> (more Linux/binary)."
+};
+
+/* ========================================================================
+   COMMANDS REFERENCE  (descriptions curated; "used in" derived from data)
+   ======================================================================== */
+const TOOLS = [
+ {name:"ssh", q:"ssh", re:/\bssh\b/, desc:"Encrypted remote login — how you move between users every level.",
+  flags:[["-p PORT","connect on a non-standard port (Bandit uses 2220)"],["-i KEYFILE","authenticate with a private key instead of a password"],["user@host cmd","run one command remotely without an interactive shell"]]},
+ {name:"ls", q:"ls", re:/\bls\b/, desc:"List directory contents.",
+  flags:[["-a","include hidden dotfiles"]]},
+ {name:"cat", q:"cat", re:/\bcat\b/, desc:"Print file contents to the terminal.",
+  flags:[["./-","read a file literally named '-' instead of stdin"]]},
+ {name:"file", q:"file", re:/\bfile\b/, desc:"Identify a file's type by its content (magic bytes), not its extension.",flags:[]},
+ {name:"find", q:"find", re:/\bfind\b/, desc:"Recursively search the filesystem by name, size, owner, or permissions.",
+  flags:[["-type f","regular files only"],["-size 1033c","exact byte size (c = bytes)"],["-user / -group","match ownership"],["-readable / -executable","permission tests"],["!","negate the next test"]]},
+ {name:"grep", q:"grep", re:/\bgrep\b/, desc:"Print lines matching (or not matching) a pattern.",
+  flags:[["-v","invert — show lines that DON'T match (filter out noise)"]]},
+ {name:"sort / uniq", q:"uniq", re:/\b(sort|uniq)\b/, desc:"Order lines, then collapse adjacent duplicates.",
+  flags:[["uniq -u","print only lines that are NOT repeated (sort first)"]]},
+ {name:"strings", q:"strings", re:/\bstrings\b/, desc:"Extract runs of printable text from a binary file.",flags:[]},
+ {name:"base64", q:"base64", re:/\bbase64\b/, desc:"Encode or decode Base64 (encoding, not encryption).",
+  flags:[["-d","decode"]]},
+ {name:"tr", q:"tr", re:/\btr\b/, desc:"Translate or substitute characters — used here for ROT13.",
+  flags:[["'A-Za-z' 'N-ZA-Mn-za-m'","map each letter to its ROT13 counterpart"]]},
+ {name:"xxd", q:"xxd", re:/\bxxd\b/, desc:"Make a hex dump — or rebuild the original binary from one.",
+  flags:[["-r","reverse: hex dump → raw binary"]]},
+ {name:"gzip / bzip2 / tar", q:"gzip", re:/\b(gunzip|gzip|bunzip2|bzip2|tar)\b/, desc:"Compression tools. Identify the format with file, then decompress.",
+  flags:[["gunzip / bunzip2","decompress .gz / .bz2"],["tar xf","extract a tar archive"]]},
+ {name:"nc (netcat)", q:"nc", re:/\bnc\b/, desc:"Raw TCP connections — send data to a port or listen on one.",
+  flags:[["-l","listen mode (act as a server)"],["-v","verbose"],["-p PORT","port to use"]]},
+ {name:"openssl s_client", q:"openssl", re:/openssl|s_client/, desc:"TLS/SSL client for talking to encrypted services.",
+  flags:[["-connect host:port","open a TLS session"],["-quiet / -ign_eof","stay connected past the first newline"]]},
+ {name:"nmap", q:"nmap", re:/\bnmap\b/, desc:"Port scanner — map which services listen on which ports.",
+  flags:[["-p 31000-32000","scan a port range"],["-sV","probe service/version (reveals SSL ports)"]]},
+ {name:"diff", q:"diff", re:/\bdiff\b/, desc:"Show line-by-line differences between two files.",flags:[]},
+ {name:"md5sum", q:"md5", re:/\bmd5sum\b/, desc:"Compute an MD5 hash — used to predict a deterministic filename.",flags:[]},
+ {name:"chmod", q:"chmod", re:/\bchmod\b/, desc:"Change file permissions.",
+  flags:[["600","private key files (owner read/write only)"],["777","shared dirs the cron user must write to"],["+x","make a script executable"]]},
+ {name:"cron", q:"cron", re:/cron/, desc:"Scheduled jobs — definitions live in /etc/cron.d/, pointing at scripts.",flags:[]},
+ {name:"git", q:"git", re:/\bgit\b/, desc:"Version-control forensics — the password hides in history, branches, or tags.",
+  flags:[["clone ssh://…","copy a repo (with full history) over SSH"],["log -p","show each commit's diff"],["branch -a","list all branches incl. remote"],["tag / show","list tags / print tagged content"],["add -f","force-stage a file past .gitignore"]]},
+ {name:"redirection", q:"redirect", re:/2>\/dev\/null/, desc:"Control where output goes.",
+  flags:[["2>/dev/null","discard stderr (fd 2) — hides Permission-denied noise"],["> file","write stdout to a file"]]},
+ {name:"shell escapes", q:"shell", re:/\$0|:shell|shell=/, desc:"Break out of restricted shells.",
+  flags:[["$0","re-exec the shell — bypasses the uppercase filter (lvl 33)"],["v (in more)","launch $EDITOR from a pager"],[":set shell / :shell","spawn a shell from vim (lvl 26)"]]},
+];
+
+/* ========================================================================
+   LAYER 3 — COMPOSE + RENDER
+   ======================================================================== */
+function compose(l){
+  const eFrom=entryFor(l.from), eTo=entryFor(l.to);
+  const yields = l.yields==='key' ? 'key' : 'password';
+  const advCmd = eTo.localhost ? eTo.cmd : ('exit\n'+eTo.cmd);
+  return [
+    {cls:'connect', dot:'⇢', label:`Connect — as bandit${l.from}`, steps:[{n:eFrom.note,c:eFrom.cmd}]},
+    {cls:'solve',   dot:'⚙', label:'Solve', steps:l.solve},
+    {cls:'capture', dot:'★', label:`Grab bandit${l.to}'s ${yields}`,
+       steps:[{cap:`bandit${l.to}'s <b>${yields}</b> is in: ${l.source}.`}]},
+    {cls:'advance', dot:'⇢', label:`Advance — become bandit${l.to}`, steps:[{n:eTo.note,c:advCmd}]},
+  ];
+}
+
+
+/* ========================================================================
+   RENDER LAYER — two-pane command center (engine/data above is unchanged)
+   ======================================================================== */
+let done=new Set(), notes={}, view='levels', query='', selLevel=1, selTool=0, noteTimer=null;
+const KEY_PROGRESS="bandit_progress_v3", KEY_NOTES="bandit_notes_v1";
+
+function esc(s){return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+function stripTags(s){return String(s).replace(/<[^>]+>/g,'');}
+function blob(l){const ef=entryFor(l.from),et=entryFor(l.to);
+  return stripTags(['Level '+l.from+' '+l.to,l.t,l.tags.join(' '),l.goal,l.hint,l.source,l.concept,l.gotcha||'',
+    l.solve.map(s=>s.n+' '+(s.c||'')).join(' '),ef.cmd,ef.note,et.cmd,et.note].join(' ')).toLowerCase();}
+function usedIn(t){return LEVELS.filter(l=>{const txt=[entryFor(l.from).cmd,entryFor(l.to).cmd,...l.solve.map(s=>s.c||'')].join('\n');return t.re.test(txt);}).map(l=>l.to);}
+function stepHTML(s){if(s.cap)return `<div class="cap">${s.cap}</div>`;
+  const cmd=s.c?`<div class="cmdbox"><button class="copy" data-cmd="${esc(s.c)}">copy</button>${esc(s.c)}</div>`:'';
+  return `<li><div class="snote">${s.n}</div>${cmd}</li>`;}
+function phaseHTML(p){let inner;
+  if(p.cls==='capture')inner=p.steps.map(stepHTML).join('');
+  else if(p.steps.length>1)inner=`<ol class="steps">${p.steps.map(stepHTML).join('')}</ol>`;
+  else{const s=p.steps[0];inner=`<div class="single"><div class="snote">${s.n}</div>${s.c?`<div class="cmdbox"><button class="copy" data-cmd="${esc(s.c)}">copy</button>${esc(s.c)}</div>`:''}</div>`;}
+  return `<div class="phase ${p.cls}"><div class="plabel"><span class="dot">${p.dot}</span>${p.label}</div>${inner}</div>`;}
+
+/* ---- persistence ---- */
+async function loadState(){
+  try{const r=await window.storage.get(KEY_PROGRESS);if(r&&r.value)done=new Set(JSON.parse(r.value));}catch(e){}
+  try{const r=await window.storage.get(KEY_NOTES);if(r&&r.value)notes=JSON.parse(r.value);}catch(e){}
+  selLevel=firstUnsolved(); renderSide(); renderDetail();
+}
+async function saveProgress(){try{await window.storage.set(KEY_PROGRESS,JSON.stringify([...done]));}catch(e){}}
+function saveNotes(){clearTimeout(noteTimer);noteTimer=setTimeout(async()=>{try{await window.storage.set(KEY_NOTES,JSON.stringify(notes));}catch(e){}},400);}
+function firstUnsolved(){const l=LEVELS.find(l=>!done.has(l.to));return l?l.to:33;}
+
+/* ---- filtered lists ---- */
+function filteredLevels(){const q=query.toLowerCase();return LEVELS.filter(l=>!q||blob(l).includes(q));}
+function filteredTools(){const q=query.toLowerCase();return TOOLS.filter(t=>!q||(t.name+' '+t.desc+' '+t.flags.map(f=>f.join(' ')).join(' ')).toLowerCase().includes(q));}
+
+/* ---- sidebar ---- */
+function renderSide(){
+  const nl=document.getElementById('navlist'); const nextId=firstUnsolved();
+  if(view==='levels'){
+    const ls=filteredLevels();
+    nl.innerHTML=ls.length?ls.map(l=>{
+      const d=done.has(l.to),act=l.to===selLevel,nx=l.to===nextId&&!d;
+      return `<button class="lrow${d?' done':''}${act?' active':''}${nx?' next':''}" data-id="${l.to}">
+        <span class="ldot"></span><span class="lnum">${String(l.to).padStart(2,'0')}</span><span class="ltxt">${esc(l.t)}</span></button>`;
+    }).join(''):'<div class="nores">no matches</div>';
+    nl.querySelectorAll('.lrow').forEach(b=>b.onclick=()=>{selLevel=+b.dataset.id;renderSide();renderDetail();closeMobile();});
+  }else{
+    const ts=filteredTools();
+    nl.innerHTML=ts.length?ts.map(t=>{const idx=TOOLS.indexOf(t),act=idx===selTool;
+      return `<button class="lrow${act?' active':''}" data-idx="${idx}"><span class="ldot tool"></span><span class="ltxt">${esc(t.name)}</span></button>`;
+    }).join(''):'<div class="nores">no matches</div>';
+    nl.querySelectorAll('.lrow').forEach(b=>b.onclick=()=>{selTool=+b.dataset.idx;renderSide();renderDetail();closeMobile();});
+  }
+  document.getElementById('doneN').textContent=done.size;
+  document.getElementById('barFill').style.width=(done.size/LEVELS.length*100)+'%';
+}
+
+/* ---- detail: level ---- */
+function levelDetailHTML(l){
+  const isDone=done.has(l.to), idx=LEVELS.findIndex(x=>x.to===l.to);
+  const phases=compose(l).map(phaseHTML).join('');
+  return `<div class="dwrap">
+    <div class="dnav">
+      <button class="dbtn" id="prevBtn" ${idx===0?'disabled':''}>← prev</button>
+      <span class="dcrumb">Level ${l.from} → ${l.to}</span>
+      <button class="dbtn" id="nextBtn" ${idx===LEVELS.length-1?'disabled':''}>next →</button>
+    </div>
+    <div class="dhead${isDone?' done':''}">
+      <h1 class="dh1"><span class="dhnum">${String(l.to).padStart(2,'0')}</span>${esc(l.t)}</h1>
+      <label class="chk"><input type="checkbox" id="clrBox" ${isDone?'checked':''}> cleared</label>
+    </div>
+    <div class="tags">${l.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+    <div class="goal"><span class="lab">objective</span>${esc(l.goal)}</div>
+    <div class="reveals">
+      <button class="rbtn" data-r="hint">▸ hint</button>
+      <div class="panel" data-p="hint"><p class="hint">${l.hint}</p></div>
+      <button class="rbtn" data-r="walk">▸ reveal walkthrough</button>
+      <div class="panel" data-p="walk">${phases}
+        <div class="concept"><span class="lab">how it works</span>${l.concept}</div>
+        ${l.gotcha?`<div class="gotcha"><span class="lab">gotcha</span>${l.gotcha}</div>`:''}
+      </div>
+    </div>
+    <div class="notes-wrap"><div class="nlab">✎ your notes</div>
+      <textarea class="notebox" id="noteBox" placeholder="captured values / observations…">${esc(notes[l.to]||'')}</textarea></div>
+    <div class="kbdhint">tip: <kbd>↑</kbd><kbd>↓</kbd> pick a level · <kbd>←</kbd><kbd>→</kbd> prev / next</div>
+  </div>`;
+}
+
+/* ---- detail: tool ---- */
+function toolDetailHTML(t){
+  const lv=usedIn(t);
+  const flags=t.flags.length?`<div class="flagtable">${t.flags.map(f=>`<div class="frow"><code>${esc(f[0])}</code><span>${esc(f[1])}</span></div>`).join('')}</div>`:'';
+  const chips=lv.length>15?'<span class="uchip" style="cursor:default">most levels — the login flow</span>':lv.map(n=>`<span class="uchip" data-goto="${n}">${String(n).padStart(2,'0')}</span>`).join('');
+  return `<div class="dwrap">
+    <div class="dnav"><span class="dcrumb">command reference</span></div>
+    <div class="dhead"><h1 class="dh1">${esc(t.name)}</h1></div>
+    <div class="tdesc">${esc(t.desc)}</div>
+    ${flags}
+    <div class="usedlab">used in</div>
+    <div class="usedchips">${chips||'<span class="uchip" style="cursor:default">—</span>'}</div>
+  </div>`;
+}
+
+/* ---- render detail + wire ---- */
+function renderDetail(){
+  const d=document.getElementById('detail');
+  if(view==='levels'){
+    const l=LEVELS.find(x=>x.to===selLevel)||LEVELS[0];
+    d.innerHTML=levelDetailHTML(l); wireLevel(d,l);
+    const mt=document.getElementById('mtitle'); if(mt)mt.textContent='Level '+l.from+' → '+l.to;
+  }else{
+    const t=TOOLS[selTool]||TOOLS[0];
+    d.innerHTML=toolDetailHTML(t); wireTool(d);
+    const mt=document.getElementById('mtitle'); if(mt)mt.textContent=t.name;
+  }
+  d.scrollTop=0;
+  d.querySelectorAll('.copy').forEach(cp=>cp.onclick=()=>{
+    navigator.clipboard.writeText(cp.dataset.cmd).then(()=>{cp.textContent='copied';setTimeout(()=>cp.textContent='copy',1200);}).catch(()=>cp.textContent='select');});
+}
+function wireLevel(d,l){
+  d.querySelector('#clrBox').onchange=e=>{e.target.checked?done.add(l.to):done.delete(l.to);saveProgress();renderSide();
+    d.querySelector('.dhead').classList.toggle('done',e.target.checked);};
+  const step=n=>{const i=LEVELS.findIndex(x=>x.to===selLevel)+n;if(i>=0&&i<LEVELS.length){selLevel=LEVELS[i].to;renderSide();renderDetail();}};
+  d.querySelector('#prevBtn').onclick=()=>step(-1);
+  d.querySelector('#nextBtn').onclick=()=>step(1);
+  d.querySelectorAll('.rbtn').forEach(btn=>btn.onclick=()=>{
+    const r=btn.dataset.r,p=d.querySelector(`[data-p="${r}"]`),open=p.classList.toggle('show');
+    btn.textContent=(open?'▾ hide ':'▸ ')+(r==='hint'?'hint':'reveal walkthrough');
+    if(r==='hint'&&!open)btn.textContent='▸ hint';
+  });
+  const ta=d.querySelector('#noteBox');
+  if(ta)ta.oninput=()=>{const v=ta.value;if(v.trim())notes[l.to]=v;else delete notes[l.to];saveNotes();};
+}
+function wireTool(d){
+  d.querySelectorAll('.uchip[data-goto]').forEach(c=>c.onclick=()=>{
+    view='levels';selLevel=+c.dataset.goto;syncTabs();
+    document.getElementById('search').value='';query='';renderSide();renderDetail();});
+}
+
+/* ---- view + nav ---- */
+function syncTabs(){document.querySelectorAll('.stab').forEach(s=>s.classList.toggle('on',s.dataset.v===view));}
+function setView(v){view=v;syncTabs();document.getElementById('search').value='';query='';renderSide();renderDetail();}
+function closeMobile(){document.getElementById('side').classList.remove('open');document.getElementById('scrim').classList.remove('show');}
+
+document.querySelectorAll('.stab').forEach(s=>s.onclick=()=>setView(s.dataset.v));
+document.getElementById('search').addEventListener('input',e=>{query=e.target.value;renderSide();});
+document.getElementById('resetBtn').onclick=()=>{if(confirm('Clear all cleared-level marks? (Notes are kept.)')){done=new Set();saveProgress();renderSide();renderDetail();}};
+document.getElementById('menuBtn').onclick=()=>{document.getElementById('side').classList.toggle('open');document.getElementById('scrim').classList.toggle('show');};
+document.getElementById('scrim').onclick=closeMobile;
+
+document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='textarea'||tag==='input')return;
+  if(view==='levels'){
+    if(e.key==='ArrowLeft'){const i=LEVELS.findIndex(x=>x.to===selLevel)-1;if(i>=0){selLevel=LEVELS[i].to;renderSide();renderDetail();e.preventDefault();}}
+    else if(e.key==='ArrowRight'){const i=LEVELS.findIndex(x=>x.to===selLevel)+1;if(i<LEVELS.length){selLevel=LEVELS[i].to;renderSide();renderDetail();e.preventDefault();}}
+    else if(e.key==='ArrowDown'||e.key==='j'){const ls=filteredLevels();const i=ls.findIndex(x=>x.to===selLevel);if(i<ls.length-1){selLevel=ls[i+1].to;renderSide();renderDetail();e.preventDefault();}}
+    else if(e.key==='ArrowUp'||e.key==='k'){const ls=filteredLevels();const i=ls.findIndex(x=>x.to===selLevel);if(i>0){selLevel=ls[i-1].to;renderSide();renderDetail();e.preventDefault();}}
+  }else{
+    if(e.key==='ArrowDown'||e.key==='j'){const ts=filteredTools();const i=ts.findIndex(t=>TOOLS.indexOf(t)===selTool);if(i<ts.length-1){selTool=TOOLS.indexOf(ts[i+1]);renderSide();renderDetail();e.preventDefault();}}
+    else if(e.key==='ArrowUp'||e.key==='k'){const ts=filteredTools();const i=ts.findIndex(t=>TOOLS.indexOf(t)===selTool);if(i>0){selTool=TOOLS.indexOf(ts[i-1]);renderSide();renderDetail();e.preventDefault();}}
+  }
+});
+
+loadState();
+</script>
+</body>
+</html>
