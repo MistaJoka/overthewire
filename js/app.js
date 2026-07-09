@@ -145,13 +145,21 @@ function removeDone(to){if(done.has(to)){done.delete(to);saveProgress();}renderS
 function markSolved(to){
   addDone(to);
   if(window.FX&&FX.captureCascade)FX.captureCascade(to);   // no-op if fx off (Task 10)
+  // The solved level `to` is the one whose terminal we're in, so selLevel===to and the
+  // currently-rendered guide pane is this level. Patch its checkbox/heading in place
+  // instead of re-rendering (a re-render would destroy the live terminal mid-motd).
+  const box=document.getElementById('clrBox'); if(box)box.checked=true;
+  const dh=document.querySelector('#detail .dhead'); if(dh)dh.classList.add('done');
 }
 function terminalCaptureComplete(to){
   // Fires AFTER the SSH-success motd has fully finished typing (never mid-animation).
+  // Deliberately does NOT touch selLevel: renderSide()/firstUnsolved() already highlight
+  // the next challenge in the sidebar, and advanceTo() drives the terminal independently.
+  // Mutating selLevel here would desync it from the still-rendered guide pane, making
+  // prev/next/keyboard nav compute off the wrong base (skipping a level).
   if(!activeTerm)return;
   const next=LEVELS.find(x=>x.from===to);
   if(!next)return;
-  selLevel=next.to; renderSide();               // sidebar highlights the next challenge
   if(next.from<=12)activeTerm.advanceTo(next);   // same session, in place — no teardown, no truncation
 }
 

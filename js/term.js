@@ -578,6 +578,12 @@ class Terminal {
       // typing — callers must not tear down/replace this terminal before
       // that, or the success banner gets truncated mid-animation.
       if (typeof this.opts.onCapture === 'function') this.opts.onCapture(target);
+      // NOTE: when typed animation is off (reduced-motion / opts.typed false), _emit
+      // runs its callback SYNCHRONOUSLY — so onCaptureComplete (and any advanceTo it
+      // triggers) fires same-tick, BEFORE the trailing this._renderInputLine() at the
+      // bottom of this method. Harmless today (that final render just re-paints the
+      // already-advanced prompt), but don't add logic here that assumes the motd/advance
+      // has NOT happened yet by the time we reach the end of _submitPassword.
       this._printSSHSuccess(() => {
         if (!this._destroyed && typeof this.opts.onCaptureComplete === 'function') {
           this.opts.onCaptureComplete(target);
