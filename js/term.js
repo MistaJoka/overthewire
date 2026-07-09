@@ -29,6 +29,7 @@ class Terminal {
     this.mode = 'shell'; // 'boot' | 'shell' | 'password'
     this.line = '';
     this.sshTarget = null;
+    this.sshHost = null;
     this.sshAttempts = 0;
     this._draft = '';
 
@@ -220,7 +221,7 @@ class Terminal {
    * Rendering helpers
    * ------------------------------------------------------------------ */
   _currentPromptText() {
-    if (this.mode === 'password') return 'bandit' + this.sshTarget + "@localhost's password: ";
+    if (this.mode === 'password') return 'bandit' + this.sshTarget + '@' + (this.sshHost || 'localhost') + "'s password: ";
     if (this.mode === 'boot') return '';
     return 'bandit' + this.level.from + '@bandit:~$ ';
   }
@@ -350,9 +351,9 @@ class Terminal {
     this.histPos = this.history.length;
     this._draft = '';
 
-    const sshN = this._matchSSHTarget(raw);
-    if (sshN !== null) {
-      this._beginSSH(sshN);
+    const ssh = this._matchSSHTarget(raw);
+    if (ssh) {
+      this._beginSSH(ssh.n, ssh.host);
       this._renderInputLine();
       return;
     }
@@ -538,18 +539,22 @@ class Terminal {
    * SSH advance flow.
    * ------------------------------------------------------------------ */
   _matchSSHTarget(raw) {
+    // Accept both the terminal-native form (bandit{n}@localhost) AND the exact
+    // command the guide shows a copy button for: `ssh -p 2220 bandit{n}@bandit.labs.overthewire.org`.
+    // Extra tokens (-p 2220, -i key) are skipped — we scan for the bandit{n}@host token.
     const tokens = raw.trim().split(/\s+/).filter(Boolean);
     if (!tokens.length || tokens[0] !== 'ssh') return null;
     for (let i = 1; i < tokens.length; i++) {
-      const m = /^bandit(\d+)@(localhost|bandit)$/.exec(tokens[i]);
-      if (m) return parseInt(m[1], 10);
+      const m = /^bandit(\d+)@(localhost|bandit|bandit\.labs\.overthewire\.org)$/.exec(tokens[i]);
+      if (m) return { n: parseInt(m[1], 10), host: m[2] };
     }
     return null;
   }
 
-  _beginSSH(n) {
+  _beginSSH(n, host) {
     this.mode = 'password';
     this.sshTarget = n;
+    this.sshHost = host || 'localhost';
     this.sshAttempts = 0;
   }
 
@@ -629,9 +634,16 @@ class Terminal {
     this.shell = new Shell(vfsForLevel(nextLevel.from));
     this.mode = 'shell';
     this.sshTarget = null;
+    this.sshHost = null;
     this.sshAttempts = 0;
     this._loadHistory();
     this._renderInputLine();
     this.focus();
   }
+}
+
+// Dual-target: the class references DOM only inside methods (never at load),
+// so it can be required under Node to unit-test pure helpers like _matchSSHTarget.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { Terminal };
 }

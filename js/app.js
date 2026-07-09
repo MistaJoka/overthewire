@@ -6,7 +6,9 @@ let revealAll=false, drillCur=null, drillShown=false, drillStats={seen:0,hit:0,s
 let activeTerm=null; // the single live Terminal instance (levels 0-12 "terminal" sub-tab)
 const KEY_PROGRESS="bandit_progress_v3", KEY_NOTES="bandit_notes_v1", KEY_THEME="bandit_theme_v1", KEY_DRILL="bandit_drill_v1";
 
-function esc(s){return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+// Escapes for HTML text AND attribute contexts (quotes included) so esc() is safe
+// to interpolate anywhere, including inside "..."-quoted attributes.
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function stripTags(s){return String(s).replace(/<[^>]+>/g,'');}
 function blob(l){const ef=entryFor(l.from),et=entryFor(l.to);
   return stripTags(['Level '+l.from+' '+l.to,l.t,l.tags.join(' '),l.goal,l.hint,l.source,l.concept,l.gotcha||'',
@@ -146,11 +148,15 @@ function removeDone(to){if(done.has(to)){done.delete(to);saveProgress();}renderS
 function markSolved(to){
   addDone(to);
   if(window.FX&&FX.captureCascade)FX.captureCascade(to);   // no-op if fx off (Task 10)
-  // The solved level `to` is the one whose terminal we're in, so selLevel===to and the
-  // currently-rendered guide pane is this level. Patch its checkbox/heading in place
-  // instead of re-rendering (a re-render would destroy the live terminal mid-motd).
-  const box=document.getElementById('clrBox'); if(box)box.checked=true;
-  const dh=document.querySelector('#detail .dhead'); if(dh)dh.classList.add('done');
+  // Patch the rendered guide pane's checkbox/heading in place instead of re-rendering
+  // (a re-render would destroy the live terminal mid-motd). Only valid when the pane on
+  // screen IS the solved level: on the first solve selLevel===to, but advanceTo() chains
+  // the terminal forward without moving selLevel, so a later in-session solve has to!==selLevel
+  // — there we skip the patch and let renderSide()/next navigation reflect it.
+  if(to===selLevel){
+    const box=document.getElementById('clrBox'); if(box)box.checked=true;
+    const dh=document.querySelector('#detail .dhead'); if(dh)dh.classList.add('done');
+  }
 }
 function terminalCaptureComplete(to){
   // Fires AFTER the SSH-success motd has fully finished typing (never mid-animation).
