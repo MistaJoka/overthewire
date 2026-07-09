@@ -60,6 +60,8 @@ const LEVELS = [
   hint:"<code>find</code> can match all three at once.",
   solve:[{n:"Chain the tests: regular file, exact size, not executable, readable.",c:"find inhere -type f -size 1033c ! -executable -readable"},
          {n:"Read the match.",c:"cat <path>"}],
+  solveExec:["find inhere -type f -size 1033c ! -executable -readable",
+             "cat inhere/maybehere07/-file7"],
   source:"the 1033-byte readable file under <code>inhere/</code>",
   concept:"<code>-size 1033c</code> = exactly 1033 bytes (c=bytes); <code>!</code> negates the next test."},
 
@@ -68,6 +70,8 @@ const LEVELS = [
   hint:"Search from <code>/</code> and discard permission-denied noise.",
   solve:[{n:"Search the entire filesystem by owner, group, and size; hide errors.",c:"find / -user bandit7 -group bandit6 -size 33c 2>/dev/null"},
          {n:"Read the single result.",c:"cat <path>"}],
+  solveExec:["find / -user bandit7 -group bandit6 -size 33c 2>/dev/null",
+             "cat /var/lib/dpkg/info/bandit7.password"],
   source:"the 33-byte file owned by bandit7",
   concept:"<code>2>/dev/null</code> sends stderr (fd 2) to the null device, hiding the 'Permission denied' spam."},
 
@@ -115,6 +119,24 @@ const LEVELS = [
          {n:"Identify the compression type.",c:"file data"},
          {n:"Rename to the matching extension and decompress (example: gzip).",c:"mv data data.gz && gunzip data.gz"},
          {n:"Repeat steps 3–4 (gunzip / bunzip2 / tar xf) ~9× until <code>file</code> says ASCII text, then read it.",c:"file data && cat data"}],
+  solveExec:["mkdir /tmp/work",
+             "cp data.txt /tmp/work",
+             "cd /tmp/work",
+             "xxd -r data.txt > data",
+             "file data",
+             "mv data data.gz && gunzip data.gz",
+             "file data",
+             "mv data data.bz2 && bunzip2 data.bz2",
+             "file data",
+             "mv data data.tar && tar xf data.tar",
+             "file data",
+             "mv data data.gz && gunzip data.gz",
+             "file data",
+             "mv data data.bz2 && bunzip2 data.bz2",
+             "file data",
+             "mv data data.tar && tar xf data.tar",
+             "file data",
+             "cat data"],
   source:"the fully decompressed file",
   concept:"<code>xxd -r</code> rebuilds binary from hex; each compressor has unique magic bytes, so <code>file</code> tells you which tool comes next.",
   gotcha:"You can't write in your home dir — always work in a unique <code>/tmp</code> folder."},
@@ -375,4 +397,8 @@ function compose(l){
        steps:[{cap:`bandit${l.to}'s <b>${yields}</b> is in: ${l.source}.`}]},
     {cls:'advance', dot:'⇢', label:`Advance — become bandit${l.to}`, steps:[{n:eTo.note,c:advCmd}]},
   ];
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { LEVELS, TOOLS, entryFor, HOST, PORT };
 }
