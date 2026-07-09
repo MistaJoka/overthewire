@@ -161,3 +161,54 @@ test('glob: no-match glob stays literal', () => {
   const seq = shAt(4, '/home/bandit4/inhere').parse('cat nomatch*xyz');
   assert.deepStrictEqual(seq[0].pipeline[0].argv, ['cat','nomatch*xyz']);
 });
+
+// --- Task 5: command execution -------------------------------------------
+
+test('ls lists home entries', () => {
+  const out = sh(0).run('ls').stdout;
+  assert.match(out, /readme/);
+});
+test('cat reads a file', () => {
+  assert.match(sh(0).run('cat readme').stdout, /[A-Za-z0-9]{32}/);
+});
+test('cat ./- reads the dash file (L1)', () => {
+  assert.match(sh(1).run('cat ./-').stdout, /[A-Za-z0-9]{32}/);
+});
+test('cat of missing file errors like coreutils', () => {
+  const r = sh(0).run('cat nope');
+  assert.strictEqual(r.code, 1);
+  assert.match(r.stderr, /No such file or directory/);
+});
+test('unknown command reports not found', () => {
+  const r = sh(0).run('frobnicate');
+  assert.match(r.stderr, /command not found/);
+});
+test('file reports ASCII vs data (L4)', () => {
+  const out = sh(4).run('file ./inhere/-file07').stdout;
+  assert.match(out, /ASCII text/);
+});
+test('find by size+owner+group with 2>/dev/null (L6)', () => {
+  const out = sh(6).run('find / -user bandit7 -group bandit6 -size 33c 2>/dev/null').stdout.trim();
+  assert.ok(out.length > 0 && !out.includes('Permission denied'));
+});
+test('grep keyword (L7)', () => {
+  assert.match(sh(7).run('grep millionth data.txt').stdout, /millionth/);
+});
+test('sort | uniq -u finds the unique line (L8)', () => {
+  const out = sh(8).run('sort data.txt | uniq -u').stdout.trim();
+  assert.match(out, /^\S{32}$/);
+});
+test('strings | grep ==== (L9)', () => {
+  assert.match(sh(9).run("strings data.txt | grep ====").stdout, /====/);
+});
+test('base64 -d (L10)', () => {
+  assert.match(sh(10).run('base64 -d data.txt').stdout, /password is \S{32}/);
+});
+test('tr ROT13 (L11)', () => {
+  assert.match(sh(11).run("cat data.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'").stdout, /password is \S{32}/);
+});
+test('redirect writes a file then cat reads it', () => {
+  const s = sh(0);
+  s.run('echo hello > /tmp/x');
+  assert.match(s.run('cat /tmp/x').stdout, /hello/);
+});
