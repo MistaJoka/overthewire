@@ -187,7 +187,6 @@
     function step(ts) {
       rafId = requestAnimationFrame(step);
       try {
-        if (document.hidden) return;
         if (ts - lastFrame < 33) return; // throttle to ~30fps
         lastFrame = ts;
         draw(ts);
@@ -204,6 +203,17 @@
     }
     function stopLoop() {
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    // True pause: fully stop the RAF while the tab is hidden and restart it
+    // (exactly one loop, guarded by rafId inside startLoop) when it becomes
+    // visible again — but only if fx is enabled and reduced-motion isn't
+    // forcing it off.
+    function onVisibility() {
+      try {
+        if (document.hidden) stopLoop();
+        else if (enabled && !reducedMotion) startLoop();
+      } catch (e) {}
     }
 
     function applyState() {
@@ -229,7 +239,7 @@
             fit();
             if (!resizeBound) {
               window.addEventListener('resize', () => { try { fit(); } catch (e) {} });
-              document.addEventListener('visibilitychange', () => { /* step() checks document.hidden each tick */ });
+              document.addEventListener('visibilitychange', onVisibility);
               resizeBound = true;
             }
           }
@@ -290,21 +300,10 @@
 
       keystroke(x, y) {
         try {
-          if (!enabled) return;
+          if (!enabled || rafId === null) return; // ignore when disabled or paused
+          if (particles.length > 60) return;      // hard cap; unreachable in practice
           particles.push({ x: x, y: y, start: (performance.now ? performance.now() : Date.now()) });
         } catch (e) {}
-      },
-
-      // --- debug helpers (not part of the callers' contract; used by the
-      // browser verification pass to inspect internal loop/throttle state) ---
-      _debug() {
-        return { enabled: enabled, rafRunning: !!rafId, nodeCount: nodes.length, state: state, reducedMotion: reducedMotion };
-      },
-      // Synchronously runs one draw() pass regardless of RAF/visibility
-      // throttling — lets automated verification confirm render correctness
-      // without fighting a headless tab's real compositor-level rAF pause.
-      _forceDraw() {
-        try { draw(performance.now ? performance.now() : Date.now()); return true; } catch (e) { return false; }
       },
     };
 
