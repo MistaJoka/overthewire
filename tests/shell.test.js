@@ -79,3 +79,42 @@ test('L12: data.txt is a hex encoding with nested layers', () => {
   assert.strictEqual(n.encoding, 'hex');
   assert.ok(Array.isArray(n.layers) && n.layers.length >= 3);
 });
+
+const { Shell } = require('../js/shell.js');
+
+function sh(n){ return new Shell(vfsForLevel(n)); }
+
+test('tokenize splits on whitespace', () => {
+  assert.deepStrictEqual(sh(0).tokenize('ls -l foo'), ['ls','-l','foo']);
+});
+test('tokenize keeps double-quoted spaces', () => {
+  assert.deepStrictEqual(sh(2).tokenize('cat "spaces in this filename"'),
+    ['cat','spaces in this filename']);
+});
+test('tokenize handles backslash-escaped space', () => {
+  assert.deepStrictEqual(sh(2).tokenize('cat spaces\\ in\\ this\\ filename'),
+    ['cat','spaces in this filename']);
+});
+test('tokenize treats ./- as a single literal token', () => {
+  assert.deepStrictEqual(sh(1).tokenize('cat ./-'), ['cat','./-']);
+});
+test('parse splits a pipeline on |', () => {
+  const seq = sh(8).parse('sort data.txt | uniq -u');
+  assert.strictEqual(seq[0].pipeline.length, 2);
+  assert.deepStrictEqual(seq[0].pipeline[0].argv, ['sort','data.txt']);
+  assert.deepStrictEqual(seq[0].pipeline[1].argv, ['uniq','-u']);
+});
+test('parse captures redirect target', () => {
+  const seq = sh(12).parse('xxd -r data.txt > data');
+  assert.strictEqual(seq[0].pipeline[0].redirect.op, '>');
+  assert.strictEqual(seq[0].pipeline[0].redirect.path, 'data');
+});
+test('parse strips 2>/dev/null into a flag', () => {
+  const seq = sh(6).parse('find / -user bandit7 2>/dev/null');
+  assert.strictEqual(seq[0].pipeline[0].stderrToNull, true);
+  assert.ok(!seq[0].pipeline[0].argv.includes('2>/dev/null'));
+});
+test('parse splits && into separate sequences', () => {
+  const seq = sh(12).parse('mkdir /tmp/w && cd /tmp/w');
+  assert.strictEqual(seq.length, 2);
+});
