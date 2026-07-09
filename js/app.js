@@ -3,6 +3,7 @@
    ======================================================================== */
 let done=new Set(), notes={}, view='levels', query='', selLevel=1, selTool=0, noteTimer=null;
 let revealAll=false, drillCur=null, drillShown=false, drillStats={seen:0,hit:0,streak:0,best:0};
+let activeTerm=null; // the single live Terminal instance (levels 0-12 "terminal" sub-tab)
 const KEY_PROGRESS="bandit_progress_v3", KEY_NOTES="bandit_notes_v1", KEY_THEME="bandit_theme_v1", KEY_DRILL="bandit_drill_v1";
 
 function esc(s){return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
@@ -83,31 +84,41 @@ function levelDetailHTML(l){
   const hintLbl=revealAll?'▾ hide hint':'▸ hint';
   const walkLbl=revealAll?'▾ hide walkthrough':'▸ reveal walkthrough';
   const script=l.solve.map(s=>s.c).filter(Boolean).join('\n');
+  const hasTerm=l.from<=12;
+  const subtabsHTML=hasTerm?`<div class="subtabs">
+      <button class="subtab on" data-sub="guide">guide</button>
+      <button class="subtab" data-sub="terminal">terminal</button>
+    </div>`:'';
+  const termPaneHTML=hasTerm?`<div class="tpane" data-pane="terminal"><div class="term-mount" id="termMount"></div></div>`:'';
   return `<div class="dwrap">
     <div class="dnav">
       <button class="dbtn" id="prevBtn" ${idx===0?'disabled':''}>← prev</button>
       <span class="dcrumb">Level ${l.from} → ${l.to}</span>
       <button class="dbtn" id="nextBtn" ${idx===LEVELS.length-1?'disabled':''}>next →</button>
     </div>
-    <div class="dhead${isDone?' done':''}">
-      <h1 class="dh1"><span class="dhnum">${String(l.to).padStart(2,'0')}</span>${esc(l.t)}</h1>
-      <label class="chk"><input type="checkbox" id="clrBox" ${isDone?'checked':''}> cleared</label>
-    </div>
-    <div class="tags">${l.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div class="goal"><span class="lab">objective</span>${esc(l.goal)}</div>
-    <div class="reveals">
-      <button class="rbtn" data-r="hint">${hintLbl}</button>
-      <div class="panel${openC}" data-p="hint"><p class="hint">${l.hint}</p></div>
-      <button class="rbtn" data-r="walk">${walkLbl}</button>
-      <div class="panel${openC}" data-p="walk">${phases}
-        <div class="concept"><span class="lab">how it works</span>${l.concept}</div>
-        ${l.gotcha?`<div class="gotcha"><span class="lab">gotcha</span>${l.gotcha}</div>`:''}
-        <button class="copyall" data-cmd="${esc(script)}">⧉ copy all commands</button>
+    ${subtabsHTML}
+    <div class="gpane on" data-pane="guide">
+      <div class="dhead${isDone?' done':''}">
+        <h1 class="dh1"><span class="dhnum">${String(l.to).padStart(2,'0')}</span>${esc(l.t)}</h1>
+        <label class="chk"><input type="checkbox" id="clrBox" ${isDone?'checked':''}> cleared</label>
       </div>
+      <div class="tags">${l.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+      <div class="goal"><span class="lab">objective</span>${esc(l.goal)}</div>
+      <div class="reveals">
+        <button class="rbtn" data-r="hint">${hintLbl}</button>
+        <div class="panel${openC}" data-p="hint"><p class="hint">${l.hint}</p></div>
+        <button class="rbtn" data-r="walk">${walkLbl}</button>
+        <div class="panel${openC}" data-p="walk">${phases}
+          <div class="concept"><span class="lab">how it works</span>${l.concept}</div>
+          ${l.gotcha?`<div class="gotcha"><span class="lab">gotcha</span>${l.gotcha}</div>`:''}
+          <button class="copyall" data-cmd="${esc(script)}">⧉ copy all commands</button>
+        </div>
+      </div>
+      <div class="notes-wrap"><div class="nlab">✎ your notes</div>
+        <textarea class="notebox" id="noteBox" placeholder="captured values / observations…">${esc(notes[l.to]||'')}</textarea></div>
+      <div class="kbdhint">tip: <kbd>↑</kbd><kbd>↓</kbd> pick a level · <kbd>←</kbd><kbd>→</kbd> prev / next</div>
     </div>
-    <div class="notes-wrap"><div class="nlab">✎ your notes</div>
-      <textarea class="notebox" id="noteBox" placeholder="captured values / observations…">${esc(notes[l.to]||'')}</textarea></div>
-    <div class="kbdhint">tip: <kbd>↑</kbd><kbd>↓</kbd> pick a level · <kbd>←</kbd><kbd>→</kbd> prev / next</div>
+    ${termPaneHTML}
   </div>`;
 }
 
@@ -127,8 +138,26 @@ function toolDetailHTML(t){
   </div>`;
 }
 
+/* ---- terminal lifecycle + progress capture ---- */
+function teardownTerminal(){if(activeTerm){activeTerm.destroy();activeTerm=null;}}
+function addDone(to){if(!done.has(to)){done.add(to);saveProgress();}renderSide();}
+function removeDone(to){if(done.has(to)){done.delete(to);saveProgress();}renderSide();}
+function markSolved(to){
+  addDone(to);
+  if(window.FX&&FX.captureCascade)FX.captureCascade(to);   // no-op if fx off (Task 10)
+}
+function terminalCaptureComplete(to){
+  // Fires AFTER the SSH-success motd has fully finished typing (never mid-animation).
+  if(!activeTerm)return;
+  const next=LEVELS.find(x=>x.from===to);
+  if(!next)return;
+  selLevel=next.to; renderSide();               // sidebar highlights the next challenge
+  if(next.from<=12)activeTerm.advanceTo(next);   // same session, in place — no teardown, no truncation
+}
+
 /* ---- render detail + wire ---- */
 function renderDetail(){
+  teardownTerminal();
   const d=document.getElementById('detail');
   if(view==='levels'){
     const l=LEVELS.find(x=>x.to===selLevel)||LEVELS[0];
@@ -148,7 +177,8 @@ function renderDetail(){
   d.querySelectorAll('.copy,.copyall').forEach(cp=>{const orig=cp.textContent;cp.onclick=()=>copyText(cp.dataset.cmd,cp,orig);});
 }
 function wireLevel(d,l){
-  d.querySelector('#clrBox').onchange=e=>{e.target.checked?done.add(l.to):done.delete(l.to);saveProgress();renderSide();
+  d.querySelector('#clrBox').onchange=e=>{
+    e.target.checked?addDone(l.to):removeDone(l.to);
     d.querySelector('.dhead').classList.toggle('done',e.target.checked);};
   const step=n=>{const i=LEVELS.findIndex(x=>x.to===selLevel)+n;if(i>=0&&i<LEVELS.length){selLevel=LEVELS[i].to;renderSide();renderDetail();}};
   d.querySelector('#prevBtn').onclick=()=>step(-1);
@@ -159,6 +189,22 @@ function wireLevel(d,l){
   });
   const ta=d.querySelector('#noteBox');
   if(ta)ta.oninput=()=>{const v=ta.value;if(v.trim())notes[l.to]=v;else delete notes[l.to];saveNotes();};
+
+  d.querySelectorAll('.subtab').forEach(btn=>btn.onclick=()=>{
+    const sub=btn.dataset.sub;
+    d.querySelectorAll('.subtab').forEach(b=>b.classList.toggle('on',b===btn));
+    d.querySelectorAll('[data-pane]').forEach(p=>p.classList.toggle('on',p.dataset.pane===sub));
+    if(sub==='terminal'){
+      if(!activeTerm){
+        const mountEl=d.querySelector('#termMount');
+        activeTerm=new Terminal(mountEl,l,{typed:true,showBanner:true,onCapture:markSolved,onCaptureComplete:terminalCaptureComplete});
+        activeTerm.mount();
+      }
+      activeTerm.focus();
+    }else{
+      teardownTerminal();
+    }
+  });
 }
 function wireTool(d){
   d.querySelectorAll('.uchip[data-goto]').forEach(c=>c.onclick=()=>{

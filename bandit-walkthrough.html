@@ -145,6 +145,15 @@
   .treal .lab{color:var(--amber);font-size:10px;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:5px}
   .treal code{background:var(--bg);color:var(--amber);padding:1px 5px;border-radius:4px;font-size:11.5px}
 
+  /* ---------- guide / terminal sub-tabs ---------- */
+  .subtabs{display:flex;gap:8px;margin-bottom:20px}
+  .subtab{background:var(--surface2);border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:11.5px;padding:7px 18px;border-radius:7px;cursor:pointer;text-transform:lowercase}
+  .subtab:hover{color:var(--text)}
+  .subtab.on{background:var(--amber);color:#1a1208;border-color:var(--amber);font-weight:700}
+  .gpane{display:none}.gpane.on{display:block}
+  .tpane{display:none}.tpane.on{display:flex;flex-direction:column;height:520px}
+  .term-mount{flex:1;min-height:0}
+
   /* ---------- in-page terminal ---------- */
   .term{display:flex;flex-direction:column;background:#0c0a08;border:1px solid var(--line);border-radius:8px;
     font-family:var(--mono);font-size:13px;color:var(--text);overflow:hidden;height:100%;min-height:260px}
@@ -185,9 +194,10 @@
   .dstat.streak b{color:var(--done)}
 
   @media print{
-    .side,.mbar,.scrim,.dnav,.reveals .rbtn,.chk,.side-ctrls,.notes-wrap,.kbdhint,.copy,.copyall{display:none!important}
+    .side,.mbar,.scrim,.dnav,.reveals .rbtn,.chk,.side-ctrls,.notes-wrap,.kbdhint,.copy,.copyall,.subtabs,.tpane{display:none!important}
     body,.app,.detail{display:block;overflow:visible;height:auto}
     .panel{display:block!important}
+    .gpane{display:block!important}
     body{background:#fff;color:#000}
     .cmdbox{background:#f4f4f4;color:#000;border:1px solid #ccc}
     .dwrap{max-width:none}
@@ -200,6 +210,7 @@
     .dwrap{padding:22px 18px 80px}
     .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30;display:none}
     .scrim.show{display:block}
+    .tpane.on{height:60vh}
   }
 </style>
 </head>

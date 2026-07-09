@@ -570,11 +570,19 @@ class Terminal {
 
     const target = this.sshTarget;
     if (target === this.level.to && pw === FAKE_PW[this.level.to]) {
-      this._printSSHSuccess();
       this.mode = 'shell';
       this.sshTarget = null;
       this.sshAttempts = 0;
+      // Fire onCapture immediately (progress/sidebar can update right away),
+      // but only fire onCaptureComplete once the motd has fully finished
+      // typing — callers must not tear down/replace this terminal before
+      // that, or the success banner gets truncated mid-animation.
       if (typeof this.opts.onCapture === 'function') this.opts.onCapture(target);
+      this._printSSHSuccess(() => {
+        if (!this._destroyed && typeof this.opts.onCaptureComplete === 'function') {
+          this.opts.onCaptureComplete(target);
+        }
+      });
     } else if (this.sshAttempts >= 3) {
       this._appendLine('Too many authentication failures.', 'term-err');
       this.mode = 'shell';
@@ -586,7 +594,7 @@ class Terminal {
     this._renderInputLine();
   }
 
-  _printSSHSuccess() {
+  _printSSHSuccess(cb) {
     const text = [
       'Welcome to Ubuntu 18.04.3 LTS (GNU/Linux 4.15.0-generic x86_64)',
       '',
@@ -594,6 +602,26 @@ class Terminal {
       '',
       'Last login: ' + new Date().toUTCString() + ' from bandit.labs.overthewire.org',
     ].join('\n');
-    this._emit(text, null, 'term-ok');
+    this._emit(text, cb, 'term-ok');
+  }
+
+  /* ------------------------------------------------------------------
+   * Advance the SAME session to the next level in place (authentic
+   * OverTheWire flow: no reconnect, no DOM teardown). Call only after
+   * the SSH-success motd has finished typing (see onCaptureComplete).
+   * Keeps existing scrollback; swaps the shell/vfs and prompt so the
+   * user lands at the next level's prompt as the new user.
+   * ------------------------------------------------------------------ */
+  advanceTo(nextLevel) {
+    if (this._destroyed || !nextLevel) return;
+    this._appendLine('');
+    this.level = nextLevel;
+    this.shell = new Shell(vfsForLevel(nextLevel.from));
+    this.mode = 'shell';
+    this.sshTarget = null;
+    this.sshAttempts = 0;
+    this._loadHistory();
+    this._renderInputLine();
+    this.focus();
   }
 }
