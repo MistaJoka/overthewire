@@ -33,6 +33,7 @@ function loadState(){
   if(store.get(KEY_THEME)==='light'){document.documentElement.setAttribute('data-theme','light');
     const tb=document.getElementById('themeBtn'); if(tb)tb.classList.add('on');}
   selLevel=firstUnsolved(); renderSide(); renderDetail();
+  if(window.FX&&FX.init)FX.init();   // no-op safe if fx.js failed to load/init (Task 10)
 }
 function saveProgress(){store.set(KEY_PROGRESS,JSON.stringify([...done]));}
 function saveNotes(){clearTimeout(noteTimer);noteTimer=setTimeout(()=>store.set(KEY_NOTES,JSON.stringify(notes)),400);}
@@ -290,6 +291,10 @@ document.getElementById('themeBtn').onclick=e=>{
   else document.documentElement.setAttribute('data-theme','light');
   store.set(KEY_THEME,light?'dark':'light');
   e.currentTarget.classList.toggle('on',!light);
+  if(window.FX&&FX.onThemeChange)FX.onThemeChange();   // re-resolve auto fx state (Task 10)
+};
+document.getElementById('fxBtn').onclick=()=>{
+  if(window.FX&&FX.setEnabled)FX.setEnabled(!FX.isEnabled());
 };
 document.getElementById('spoilBtn').onclick=e=>{
   revealAll=!revealAll;

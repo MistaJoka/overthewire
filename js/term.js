@@ -165,6 +165,20 @@ class Terminal {
   _onInput() {
     this.line = this.inputEl.value;
     this._renderInputLine();
+    this._pingFX();
+  }
+
+  // Optional FX bonus (Task 10): a glow particle at the cursor's on-screen
+  // position. Only ever reads the cursor element's bounding box — never the
+  // typed value — so this is safe even in masked password mode. Guarded and
+  // fully no-op if FX is absent/disabled/errors.
+  _pingFX() {
+    try {
+      if (window.FX && FX.keystroke && this.cursorEl) {
+        const r = this.cursorEl.getBoundingClientRect();
+        FX.keystroke(r.left, r.top + r.height / 2);
+      }
+    } catch (e) { /* cosmetic only */ }
   }
 
   _onKeydown(e) {

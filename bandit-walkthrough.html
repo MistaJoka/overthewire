@@ -23,12 +23,28 @@
     -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
   ::selection{background:rgba(240,168,48,.25)}
 
+  /* ---------- FX layer (Task 10): generative bg canvas + CRT overlay ---------- */
+  #bgfx{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.4;display:block}
+  .crt{position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0;transition:opacity .3s ease}
+  html.crt-on .crt{opacity:1;animation:crt-flicker 7s ease-in-out infinite}
+  .crt::before{content:'';position:absolute;inset:0;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px);
+    mix-blend-mode:multiply}
+  .crt::after{content:'';position:absolute;inset:0;
+    background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.32) 100%)}
+  @keyframes crt-flicker{0%,100%{opacity:1}48%{opacity:1}50%{opacity:.965}52%{opacity:1}77%{opacity:.985}}
+  html.crt-on .brand,html.crt-on .dh1{text-shadow:0 0 6px rgba(240,168,48,.35)}
+  @media (prefers-reduced-motion: reduce){
+    html.crt-on .crt{animation:none}
+    #bgfx{display:none}
+  }
+
   /* mobile bar */
-  .mbar{display:none;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .mbar{position:relative;z-index:1;display:none;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
   .mbar button{background:var(--surface2);border:1px solid var(--line);color:var(--amber);font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:7px;cursor:pointer}
   .mbar span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  .app{flex:1;display:flex;min-height:0}
+  .app{position:relative;z-index:1;flex:1;display:flex;min-height:0}
 
   /* ---------- sidebar ---------- */
   .side{width:var(--side);flex-shrink:0;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--surface)}
@@ -50,9 +66,11 @@
   .navlist{flex:1;overflow-y:auto;padding:2px 10px 16px}
   .nores{color:var(--muted);font-size:12px;padding:16px 8px;text-align:center}
   .lrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;border-left:2px solid transparent;
-    color:var(--muted);font-family:var(--mono);font-size:12.5px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:.12s}
+    color:var(--muted);font-family:var(--mono);font-size:12.5px;padding:8px 10px;border-radius:6px;cursor:pointer;
+    transition:background .35s ease,box-shadow .35s ease,color .35s ease,border-color .12s ease}
   .lrow:hover{background:var(--surface2);color:var(--text)}
   .lrow.active{background:var(--surface2);color:var(--text);border-left-color:var(--amber)}
+  .lrow.cascade{background:rgba(127,199,127,.3)!important;box-shadow:inset 0 0 0 1px rgba(127,199,127,.55);color:var(--done)!important}
   .ldot{width:8px;height:8px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--line);flex-shrink:0}
   .lrow.done .ldot{background:var(--done);border-color:var(--done)}
   .lrow.next .ldot{border-color:var(--amber);box-shadow:0 0 0 3px rgba(240,168,48,.15)}
@@ -194,7 +212,7 @@
   .dstat.streak b{color:var(--done)}
 
   @media print{
-    .side,.mbar,.scrim,.dnav,.reveals .rbtn,.chk,.side-ctrls,.notes-wrap,.kbdhint,.copy,.copyall,.subtabs,.tpane{display:none!important}
+    .side,.mbar,.scrim,.dnav,.reveals .rbtn,.chk,.side-ctrls,.notes-wrap,.kbdhint,.copy,.copyall,.subtabs,.tpane,.crt,#bgfx{display:none!important}
     body,.app,.detail{display:block;overflow:visible;height:auto}
     .panel{display:block!important}
     .gpane{display:block!important}
@@ -215,6 +233,7 @@
 </style>
 </head>
 <body>
+  <canvas id="bgfx" aria-hidden="true"></canvas>
   <div class="mbar">
     <button id="menuBtn">☰ menu</button>
     <span id="mtitle"></span>
@@ -234,6 +253,7 @@
       <div class="side-ctrls">
         <button class="ctrl" id="themeBtn">◐ theme</button>
         <button class="ctrl" id="spoilBtn">👁 reveal all</button>
+        <button class="ctrl" id="fxBtn">⚡ fx</button>
       </div>
       <input class="side-search" id="search" placeholder="filter…">
       <nav class="navlist" id="navlist"></nav>
@@ -241,10 +261,12 @@
     <div class="scrim" id="scrim"></div>
     <main class="detail" id="detail"></main>
   </div>
+  <div class="crt" id="crtOverlay" aria-hidden="true"></div>
 <script src="js/data.js"></script>
 <script src="js/vfs.js"></script>
 <script src="js/shell.js"></script>
 <script src="js/term.js"></script>
+<script src="js/fx.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
