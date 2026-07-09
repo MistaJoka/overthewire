@@ -340,7 +340,11 @@ class Shell {
     else names = names.concat(['.', '..']);
     names.sort();
     if (flags.has('l')) {
-      const lines = names.map((name) => this._lsLongLine(node.entries[name] || node, name, flags.has('h')));
+      // `.` stats as this dir; `..` stats as the parent (matches real ls -la).
+      const absDir = V.resolvePath(this.fs, path);
+      const parentNode = V.nodeAt(this.fs, absDir + '/..') || node;
+      const statOf = (name) => (name === '.' ? node : name === '..' ? parentNode : node.entries[name]);
+      const lines = names.map((name) => this._lsLongLine(statOf(name), name, flags.has('h')));
       return { stdout: lines.join('\n') + (lines.length ? '\n' : ''), stderr: '', code: 0 };
     }
     return { stdout: names.join('\n') + (names.length ? '\n' : ''), stderr: '', code: 0 };

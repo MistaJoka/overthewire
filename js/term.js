@@ -18,15 +18,6 @@ const TERM_CLEAR_SENTINEL = '\x1b[CLEAR]';
 const TERM_EXIT_SENTINEL = '\x1b[EXIT]';
 const TERM_TYPE_DELAY_MS = 16;
 
-// Fallback command list, only used if a Shell instance somehow doesn't
-// expose its command table (Shell.cmds is public in the current impl).
-const TERM_STATIC_CMDS = [
-  'ls', 'cd', 'pwd', 'cat', 'file', 'find', 'grep', 'sort', 'uniq', 'strings',
-  'base64', 'tr', 'xxd', 'gzip', 'gunzip', 'bzip2', 'bunzip2', 'tar', 'head',
-  'tail', 'wc', 'mkdir', 'cp', 'mv', 'echo', 'whoami', 'hostname', 'clear',
-  'reset', 'exit',
-];
-
 class Terminal {
   constructor(mountEl, level, opts) {
     this.mountEl = mountEl;
@@ -471,8 +462,7 @@ class Terminal {
    * later words always against path entries in the shell's cwd.
    * ------------------------------------------------------------------ */
   _commandNames() {
-    if (this.shell && this.shell.cmds) return Object.keys(this.shell.cmds);
-    return TERM_STATIC_CMDS.slice();
+    return this.shell && this.shell.cmds ? Object.keys(this.shell.cmds) : [];
   }
 
   _pathCandidates(partial) {

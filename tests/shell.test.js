@@ -288,3 +288,27 @@ test('L12: tar tf lists the member without extracting', () => {
   // listing must NOT have popped the layer -- file data is still a tar archive
   assert.match(s.run('file data').stdout, /tar archive/);
 });
+
+// ---- cosmetic-sweep additions (pre-merge) ----
+
+test('tar xf on a non-tar file errors (not in tar format, code 1)', () => {
+  const r = sh(0).run('tar xf readme');
+  assert.strictEqual(r.code, 1);
+  assert.match(r.stderr, /not in tar format/);
+});
+
+test('ls -la: `..` stats as the parent dir, `.` as the current dir', () => {
+  // Build a fs where parent (/) and cwd (/sub) have DIFFERENT owners, so the
+  // fix is observable: `.` -> alice (the cwd), `..` -> root (the parent).
+  const V = require('../js/vfs.js');
+  const tree = V.dir({
+    sub: V.dir({ x: V.file('hi', { owner: 'alice', group: 'alice' }) },
+      { owner: 'alice', group: 'alice' }),
+  }, { owner: 'root', group: 'root' });
+  const s = new Shell({ cwd: '/sub', home: '/sub', user: 'alice', tree });
+  const out = s.run('ls -la').stdout.split('\n');
+  const dotLine = out.find((l) => / \.$/.test(l));
+  const dotdotLine = out.find((l) => / \.\.$/.test(l));
+  assert.match(dotLine, /alice/, '`.` should stat the cwd (alice-owned)');
+  assert.match(dotdotLine, /\broot\b/, '`..` should stat the parent (root-owned)');
+});
