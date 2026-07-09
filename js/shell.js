@@ -208,6 +208,11 @@ class Shell {
       base64: (a, s) => this._base64(a, s),
       tr: (a, s) => this._tr(a, s),
       xxd: (a, s) => this._xxd(a, s),
+      gzip: (a) => this._gzip(a),
+      gunzip: (a) => this._gunzip(a),
+      bzip2: (a) => this._bzip2(a),
+      bunzip2: (a) => this._bunzip2(a),
+      tar: (a) => this._tar(a),
       head: (a, s) => this._head(a, s),
       tail: (a, s) => this._tail(a, s),
       wc: (a, s) => this._wc(a, s),
@@ -253,7 +258,7 @@ class Shell {
 
       const lastCmd = pipeline[pipeline.length - 1];
       if (lastCmd && lastCmd.redirect && lastCmd.redirect.op && lastCmd.redirect.path) {
-        this._writeRedirect(lastCmd.redirect, result.stdout);
+        this._writeRedirect(lastCmd.redirect, result);
       } else {
         stdout += result.stdout;
       }
@@ -280,10 +285,20 @@ class Shell {
     return result;
   }
 
-  _writeRedirect(redirect, content) {
+  // `result` is the executed command's { stdout, stderr, code, nodeOverride? }.
+  // Most commands only carry plain text in stdout, written as a fresh file
+  // node. A handful of Task 6 transforms (xxd -r) need to hand a fully-built
+  // node -- carrying non-text metadata like `encoding`/`layers` -- straight
+  // through the redirect instead of round-tripping it through a string.
+  _writeRedirect(redirect, result) {
     const abs = V.resolvePath(this.fs, redirect.path);
     const { parent, name } = V.parentAndName(this.fs, abs);
     if (!parent || parent.type !== 'dir') return;
+    if (result.nodeOverride) {
+      parent.entries[name] = result.nodeOverride;
+      return;
+    }
+    const content = result.stdout;
     const existing = parent.entries[name];
     if (redirect.op === '>>' && existing && existing.type === 'file') {
       existing.content += content;
@@ -649,7 +664,19 @@ class Shell {
   _xxd(args, stdin) {
     const { flags, rest } = _splitFlags(args);
     if (flags.has('r')) {
-      return { stdout: '', stderr: 'xxd: -r reversal lands in a later task\n', code: 1 };
+      if (!rest.length) return { stdout: '', stderr: 'xxd: missing operand\n', code: 1 };
+      const p = rest[0];
+      const node = V.nodeAt(this.fs, p);
+      if (!node) return { stdout: '', stderr: 'xxd: ' + p + ': No such file or directory\n', code: 1 };
+      if (node.encoding !== 'hex' || !Array.isArray(node.layers) || node.layers.length === 0) {
+        return { stdout: '', stderr: "xxd: -r: '" + p + "' is not a recognized hex dump\n", code: 1 };
+      }
+      // Reversing the hexdump reveals the compression onion's first layer:
+      // promote layers[0] into the node's live encoding, demote the rest
+      // into `layers`. Handed back as nodeOverride so a `> data` redirect
+      // writes the fully-typed node (not just a text blob).
+      const built = this._popLayer(node.layers[0], node.layers.slice(1));
+      return { stdout: '', stderr: '', code: 0, nodeOverride: built };
     }
     let text;
     if (rest.length) {
@@ -676,6 +703,131 @@ class Shell {
       lines.push(offset + ': ' + hexPart + '  ' + asciiPart);
     }
     return { stdout: lines.join('\n') + (lines.length ? '\n' : ''), stderr: '', code: 0 };
+  }
+
+  /* -------------------------------------------------------------------
+   * Level-12 decompression onion (Task 6).
+   *
+   * The level-12 vfs node (js/vfs.js) is `{encoding:'hex', layers:[...]}`
+   * where each layers[i] is `{step, encoding, note, content?}` -- a queue
+   * of what's revealed by successively peeling the compression stack.
+   * The LIVE node, once unwrapped, mirrors _classify()'s existing
+   * expectations directly: `node.encoding` holds the CURRENT top type
+   * ('gzip' | 'bzip2' | 'tar'), and `node.layers` holds what's still
+   * queued up behind it. Content is a non-printable placeholder blob so
+   * _classify's ASCII sniff doesn't short-circuit before the encoding
+   * check. Popping the last real layer (the trailing {encoding:'ascii',
+   * content} entry) yields a plain text node -- no encoding, no layers.
+   * ------------------------------------------------------------------- */
+  _popLayer(entry, rest) {
+    if (entry.encoding === 'ascii') {
+      return V.file(entry.content, { owner: this.fs.user, group: this.fs.user });
+    }
+    const placeholder = '\x00\x01\x02' + entry.encoding + '-blob\x03';
+    return V.file(placeholder, {
+      owner: this.fs.user,
+      group: this.fs.user,
+      encoding: entry.encoding,
+      layers: rest,
+    });
+  }
+
+  // Peel the CURRENT top layer off an already-unwrapped node (used by
+  // gunzip/bunzip2/tar-xf once the required type has been checked).
+  _popTop(node) {
+    const layers = Array.isArray(node.layers) ? node.layers : [];
+    const next = layers[0];
+    const rest = layers.slice(1);
+    if (!next) return V.file('', { owner: this.fs.user, group: this.fs.user });
+    return this._popLayer(next, rest);
+  }
+
+  // Shared by gzip -d/gunzip and bzip2 -d/bunzip2: require the node's
+  // current top layer match `requiredType`, else error like coreutils
+  // ("gzip: <f>: not in gzip format", exit 1). On success, pop the layer
+  // and write the result back, stripping `stripExt` from the filename
+  // (mirroring the real mv-to-.gz-then-decompress dance).
+  _decompressCmd(label, requiredType, stripExt, args) {
+    if (!args.length) return { stdout: '', stderr: label + ': missing operand\n', code: 1 };
+    const p = args[0];
+    const abs = V.resolvePath(this.fs, p);
+    const node = V.nodeAt(this.fs, abs);
+    if (!node) return { stdout: '', stderr: label + ": can't stat " + p + ": No such file or directory\n", code: 1 };
+    if (node.encoding !== requiredType) {
+      return { stdout: '', stderr: label + ': ' + p + ': not in ' + requiredType + ' format\n', code: 1 };
+    }
+    const newNode = this._popTop(node);
+    const outAbs = stripExt ? abs.replace(stripExt, '') : abs;
+    const { parent: srcParent, name: srcName } = V.parentAndName(this.fs, abs);
+    if (outAbs === abs) {
+      if (srcParent) srcParent.entries[srcName] = newNode;
+    } else {
+      if (srcParent) delete srcParent.entries[srcName];
+      const { parent: dstParent, name: dstName } = V.parentAndName(this.fs, outAbs);
+      if (dstParent) dstParent.entries[dstName] = newNode;
+    }
+    return { stdout: '', stderr: '', code: 0 };
+  }
+
+  _gzip(args) {
+    const { flags, rest } = _splitFlags(args);
+    if (flags.has('d')) return this._decompressCmd('gzip', 'gzip', /\.gz$/, rest);
+    return { stdout: '', stderr: 'gzip: compression not supported in this simulator\n', code: 1 };
+  }
+
+  _gunzip(args) {
+    return this._decompressCmd('gzip', 'gzip', /\.gz$/, args);
+  }
+
+  _bzip2(args) {
+    const { flags, rest } = _splitFlags(args);
+    if (flags.has('d')) return this._decompressCmd('bzip2', 'bzip2', /\.bz2$/, rest);
+    return { stdout: '', stderr: 'bzip2: compression not supported in this simulator\n', code: 1 };
+  }
+
+  _bunzip2(args) {
+    return this._decompressCmd('bzip2', 'bzip2', /\.bz2$/, args);
+  }
+
+  // Old-style `tar xf <f>` / `tar tf <f>` (mode letters glommed together,
+  // no leading dash required -- also accepts `-xf`/`-tf`). `x` extracts
+  // (pops the tar layer, drops the `.tar` extension); `t` only lists the
+  // archived member's synthetic name, without mutating the node.
+  _tar(args) {
+    if (args.length < 2) return { stdout: '', stderr: 'tar: missing operand\n', code: 1 };
+    let mode = args[0];
+    if (mode[0] === '-') mode = mode.slice(1);
+    const p = args[1];
+    const abs = V.resolvePath(this.fs, p);
+    const node = V.nodeAt(this.fs, abs);
+    if (!node) return { stdout: '', stderr: 'tar: ' + p + ": Cannot open: No such file or directory\n", code: 1 };
+    if (node.encoding !== 'tar') {
+      return { stdout: '', stderr: 'tar: ' + p + ': not in tar format\n', code: 1 };
+    }
+    const layers = Array.isArray(node.layers) ? node.layers : [];
+    const memberName = this._tarMemberName(layers[0]);
+
+    if (mode.indexOf('t') !== -1) {
+      return { stdout: memberName + '\n', stderr: '', code: 0 };
+    }
+
+    const newNode = this._popTop(node);
+    const outAbs = abs.replace(/\.tar$/, '');
+    const { parent: srcParent, name: srcName } = V.parentAndName(this.fs, abs);
+    if (outAbs === abs) {
+      if (srcParent) srcParent.entries[srcName] = newNode;
+    } else {
+      if (srcParent) delete srcParent.entries[srcName];
+      const { parent: dstParent, name: dstName } = V.parentAndName(this.fs, outAbs);
+      if (dstParent) dstParent.entries[dstName] = newNode;
+    }
+    return { stdout: '', stderr: '', code: 0 };
+  }
+
+  _tarMemberName(nextEntry) {
+    if (!nextEntry) return 'data';
+    const ext = { gzip: '.gz', bzip2: '.bz2', tar: '.tar', ascii: '' }[nextEntry.encoding] || '';
+    return 'data' + ext;
   }
 
   _head(args, stdin) {

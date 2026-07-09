@@ -227,3 +227,64 @@ test('2>/dev/null on the failing stage suppresses its stderr', () => {
   assert.strictEqual(r.code, 0);
   assert.strictEqual(r.stderr, '');
 });
+
+// --- Task 6: level-12 decompression chain --------------------------------
+
+test('L12: full decompression chain yields the password', () => {
+  const s = sh(12);
+  s.run('mkdir /tmp/work');
+  s.run('cp data.txt /tmp/work/data.txt');
+  s.run('cd /tmp/work');
+  s.run('xxd -r data.txt > data');
+  // loop: file -> rename to matching extension -> decompress, until ASCII.
+  // (Adjusted from the brief's rigged `mv data* data` tar step, which is
+  // ambiguous once the source archive itself matches the `data*` glob --
+  // our tar xf, like gunzip/bunzip2, unwraps in place from the renamed
+  // `.tar` file back onto `data`.)
+  for (let i = 0; i < 12; i++) {
+    const t = s.run('file data').stdout;
+    if (/ASCII text/.test(t)) break;
+    if (/gzip/.test(t)) { s.run('mv data data.gz && gunzip data.gz'); }
+    else if (/bzip2/.test(t)) { s.run('mv data data.bz2 && bunzip2 data.bz2'); }
+    else if (/tar/.test(t)) { s.run('mv data data.tar && tar xf data.tar'); }
+  }
+  assert.match(s.run('cat data').stdout, /password is \S{32}/);
+});
+
+test('L12: file reports each compression stage by name', () => {
+  const s = sh(12);
+  s.run('mkdir /tmp/w3');
+  s.run('cp data.txt /tmp/w3/data.txt');
+  s.run('cd /tmp/w3');
+  assert.match(s.run('file data.txt').stdout, /ASCII text/);
+  s.run('xxd -r data.txt > data');
+  assert.match(s.run('file data').stdout, /gzip compressed data/);
+});
+
+test('L12: bunzip2 on a gzip-layered file errors like coreutils (wrong type)', () => {
+  const s = sh(12);
+  s.run('mkdir /tmp/w2');
+  s.run('cp data.txt /tmp/w2/data.txt');
+  s.run('cd /tmp/w2');
+  s.run('xxd -r data.txt > data'); // top layer is gzip, not bzip2
+  const r = s.run('bunzip2 data');
+  assert.strictEqual(r.code, 1);
+  assert.match(r.stderr, /not in bzip2 format/);
+});
+
+test('L12: tar tf lists the member without extracting', () => {
+  const s = sh(12);
+  s.run('mkdir /tmp/w4');
+  s.run('cp data.txt /tmp/w4/data.txt');
+  s.run('cd /tmp/w4');
+  s.run('xxd -r data.txt > data');
+  s.run('mv data data.gz && gunzip data.gz');   // -> bzip2
+  s.run('mv data data.bz2 && bunzip2 data.bz2'); // -> tar
+  const before = s.run('file data').stdout;
+  assert.match(before, /tar archive/);
+  const listing = s.run('tar tf data');
+  assert.strictEqual(listing.code, 0);
+  assert.ok(listing.stdout.trim().length > 0);
+  // listing must NOT have popped the layer -- file data is still a tar archive
+  assert.match(s.run('file data').stdout, /tar archive/);
+});
