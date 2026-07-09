@@ -212,3 +212,18 @@ test('redirect writes a file then cat reads it', () => {
   s.run('echo hello > /tmp/x');
   assert.match(s.run('cat /tmp/x').stdout, /hello/);
 });
+test('stderr from a non-final pipeline stage is surfaced', () => {
+  // `cat nope | wc -l`: cat fails, wc succeeds on empty stdin. Real bash
+  // shows cat's error on fd 2 while wc still prints "0" and the pipeline
+  // exit code is wc's (0, no pipefail).
+  const r = sh(0).run('cat nope | wc -l');
+  assert.strictEqual(r.stdout, '0\n');
+  assert.strictEqual(r.code, 0);
+  assert.match(r.stderr, /No such file or directory/);
+});
+test('2>/dev/null on the failing stage suppresses its stderr', () => {
+  const r = sh(0).run('cat nope 2>/dev/null | wc -l');
+  assert.strictEqual(r.stdout, '0\n');
+  assert.strictEqual(r.code, 0);
+  assert.strictEqual(r.stderr, '');
+});

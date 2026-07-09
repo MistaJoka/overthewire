@@ -244,17 +244,21 @@ class Shell {
       for (const cmd of pipeline) {
         result = this.exec1(cmd, stdin);
         stdin = result.stdout;
+        // In real bash each stage writes its own stderr to the terminal's
+        // fd 2 independently of the pipe, so accumulate EVERY stage's
+        // stderr here -- not just the last command's. exec1 has already
+        // applied per-command `2>/dev/null` suppression.
+        stderr += result.stderr;
       }
 
       const lastCmd = pipeline[pipeline.length - 1];
       if (lastCmd && lastCmd.redirect && lastCmd.redirect.op && lastCmd.redirect.path) {
         this._writeRedirect(lastCmd.redirect, result.stdout);
-        stderr += result.stderr;
       } else {
         stdout += result.stdout;
-        stderr += result.stderr;
       }
 
+      // Exit code is the LAST stage's code (bash semantics, no pipefail).
       code = result.code;
       if (code !== 0) break;
     }
