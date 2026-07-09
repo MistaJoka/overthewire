@@ -118,3 +118,46 @@ test('parse splits && into separate sequences', () => {
   const seq = sh(12).parse('mkdir /tmp/w && cd /tmp/w');
   assert.strictEqual(seq.length, 2);
 });
+
+// --- Glob expansion (bound constraint; covers all five rules) -----------
+
+// Shell rooted at a given cwd so globs match against a real vfs dir.
+function shAt(n, cwd){ const fs = vfsForLevel(n); fs.cwd = cwd; return new Shell(fs); }
+
+test('glob: * expands to multiple matching entries, sorted', () => {
+  // /home/bandit4/inhere holds -file00 .. -file09
+  const seq = shAt(4, '/home/bandit4/inhere').parse('cat -file0*');
+  assert.deepStrictEqual(seq[0].pipeline[0].argv,
+    ['cat','-file00','-file01','-file02','-file03','-file04',
+     '-file05','-file06','-file07','-file08','-file09']);
+});
+
+test('glob: quoted glob is NOT expanded (stays literal)', () => {
+  const seq = shAt(4, '/home/bandit4/inhere').parse('cat "-file0*"');
+  assert.deepStrictEqual(seq[0].pipeline[0].argv, ['cat','-file0*']);
+});
+
+test('glob: * does not match a leading dot', () => {
+  // Custom fs whose cwd holds one dotfile + one normal file.
+  const fs = {
+    cwd: '/',
+    tree: { type: 'dir', entries: {
+      '.hidden': { type: 'file', content: '' },
+      'visible': { type: 'file', content: '' },
+    }},
+  };
+  const seq = new Shell(fs).parse('ls *');
+  assert.deepStrictEqual(seq[0].pipeline[0].argv, ['ls','visible']);
+});
+
+test('glob: ? matches exactly one character', () => {
+  const seq = shAt(4, '/home/bandit4/inhere').parse('cat -file0?');
+  assert.deepStrictEqual(seq[0].pipeline[0].argv,
+    ['cat','-file00','-file01','-file02','-file03','-file04',
+     '-file05','-file06','-file07','-file08','-file09']);
+});
+
+test('glob: no-match glob stays literal', () => {
+  const seq = shAt(4, '/home/bandit4/inhere').parse('cat nomatch*xyz');
+  assert.deepStrictEqual(seq[0].pipeline[0].argv, ['cat','nomatch*xyz']);
+});

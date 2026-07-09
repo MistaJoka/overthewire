@@ -197,6 +197,11 @@ class Shell {
 
   parse(line) {
     const { tokens, quoted } = this._tokenizeWithQuotes(line);
+    // NOTE: globs are expanded across the WHOLE token stream before splitting
+    // on |/&&/redirects. A multi-match glob used as a redirect target (e.g.
+    // `ls > out*.txt` matching several files) therefore splices the extra
+    // filenames into the command's argv rather than raising bash's "ambiguous
+    // redirect". Task 5 (execution) owns resolving that; do not change here.
     const expanded = this.expandGlobs(tokens, quoted);
 
     const sequences = _splitOn(expanded, '&&').map((seqTokens) => {
