@@ -74,9 +74,12 @@ headlessly.
 - **Command set:** `ls` (-l -a -h), `cd`, `pwd`, `cat`, `file`, `find`
   (-type -name -size -user -group -readable), `grep` (-i, file args or stdin),
   `sort` (-n -r), `uniq` (-u -c -d), `strings`, `base64` (-d), `tr`, `xxd`
-  (-r), `gzip`/`gunzip`, `bzip2`/`bunzip2`, `tar` (xf/tf), `du` (-b -a), `head`/`tail`
-  (-n), `wc` (-l -c), `mkdir`, `cp`, `mv`, `echo`, `man`/`help`, `clear`,
+  (-r), `gzip`/`gunzip`, `bzip2`/`bunzip2`, `tar` (xf/tf), `head`/`tail`
+  (-n), `wc` (-l -c), `mkdir`, `cp`, `mv`, `echo`, `clear`,
   `whoami`, `hostname`, `reset`, `exit`, and `ssh` (special, below).
+  (`du`/`man`/`help` were scoped but not needed by any level 0–12 solution,
+  so they were left unimplemented — unknown commands give the real
+  `bash: <cmd>: command not found`.)
   Flags beyond these are accepted where harmless or produce the real error.
 - **Errors mirror real coreutils:** `bash: foo: command not found`,
   `cat: foo: No such file or directory`, `cat: foo: Permission denied`, etc.
